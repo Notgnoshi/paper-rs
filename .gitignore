@@ -14,3 +14,9 @@ gradle.properties.local
 
 # Paper dev server working dir
 /run/
+
+# Eclipse / JDT (jdt.ls, VS Code Java, etc.)
+.project
+.classpath
+.settings/
+bin/
