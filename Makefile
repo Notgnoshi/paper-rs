@@ -7,19 +7,24 @@ gradlew:
 	gradle wrapper --gradle-version $(GRADLE_VERSION)
 
 .PHONY: paper-shim
-paper-shim: gradlew
+paper-shim: gradlew cargo
 	./gradlew :paper-shim:build
 
 .PHONY: disco-plugin
-disco-plugin: paper-shim
+disco-plugin: gradlew cargo
 	./gradlew :disco-plugin:build
 
+.PHONY: cargo
+cargo:
+	cargo build
+
 .PHONY: run
-run: gradlew
+run: disco-plugin
 	./gradlew :disco-plugin:runServer
 
 .PHONY: clean clean-all
 clean:
+	cargo clean
 	rm -rf ./build ./run
 clean-all: clean
 	rm -rf ./.gradle/ ./gradle/ gradlew gradlew.bat
