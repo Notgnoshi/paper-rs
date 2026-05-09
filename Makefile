@@ -16,11 +16,11 @@ disco-plugin: gradlew cargo
 
 .PHONY: cargo
 cargo:
-	cargo build
+	cargo build --release
 
 .PHONY: run
 run: disco-plugin
-	./gradlew :disco-plugin:runServer
+	./gradlew :disco-plugin:runServer -PnativeLib=$(abspath target/release/libdisco_ffi.so)
 
 .PHONY: clean clean-all
 clean:
