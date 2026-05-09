@@ -52,5 +52,5 @@ unzip "/tmp/gradle.zip" -d "$HOME/.local/share/"
 ln -sf "$HOME/.local/share/gradle-${GRADLE_VERSION}/bin/gradle" "$HOME/.local/bin/gradle"
 ```
 
-Gradle is only needed once, to bootstrap the committed `./gradlew` wrapper. After the wrapper is in
+Gradle is only needed once, to bootstrap the gitignored `./gradlew` wrapper. After the wrapper is in
 place, `./gradlew` self-manages its Gradle distribution and Gradle does not need to be on `$PATH`.
