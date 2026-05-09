@@ -11,3 +11,6 @@ gradle.properties.local
 /gradlew
 /gradlew.bat
 /gradle/
+
+# Paper dev server working dir
+/run/

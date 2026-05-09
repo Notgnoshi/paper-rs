@@ -1,0 +1,6 @@
+name: Disco
+version: 0.0.1-rc0
+main: io.disco.plugin.DiscoPlugin
+api-version: '26.1.2'
+description: PoC plugin proving Paper + Panama + Rust feasibility.
+author: Austin Gill

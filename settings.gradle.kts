@@ -1,3 +1,3 @@
 rootProject.name = "paper-rs"
 
-include(":paper-shim")
+include(":paper-shim", ":disco-plugin")
