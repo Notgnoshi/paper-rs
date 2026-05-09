@@ -5,7 +5,8 @@ import java.nio.file.Path;
 
 public final class NativeLoader {
 
-    private NativeLoader() {}
+    private NativeLoader() {
+    }
 
     public static void load(String path) {
         Path resolved = Path.of(path).toAbsolutePath();
