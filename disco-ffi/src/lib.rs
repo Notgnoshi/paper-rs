@@ -34,3 +34,14 @@ pub extern "C" fn disco_hello(
     out.copy_from_slice(&bytes[..n]);
     n as c_int
 }
+
+/// Pick a DyeColor index (0..=15) for a sheep with the given UUID.
+#[unsafe(no_mangle)]
+pub extern "C" fn disco_pick_sheep_color(uuid_ptr: *const c_uchar, uuid_len: c_int) -> c_int {
+    let bytes = unsafe { std::slice::from_raw_parts(uuid_ptr, uuid_len as usize) };
+    let mut uuid = [0u8; 16];
+    if bytes.len() >= 16 {
+        uuid.copy_from_slice(&bytes[..16]);
+    }
+    disco_core::pick_sheep_color(uuid) as c_int
+}

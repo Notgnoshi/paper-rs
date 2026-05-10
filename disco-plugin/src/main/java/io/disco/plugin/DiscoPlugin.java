@@ -37,6 +37,8 @@ public final class DiscoPlugin extends JavaPlugin {
             throw new IllegalStateException("/hello command missing from plugin.yml");
         }
         hello.setExecutor(new HelloCommand());
+
+        getServer().getPluginManager().registerEvents(new SheepListener(), this);
     }
 
     @Override
