@@ -1,23 +1,22 @@
 package io.paperrs.shim;
 
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
-import java.nio.charset.StandardCharsets;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Receives log events forwarded from a paper-rs cdylib via a Panama upcall and
- * routes them to a java.util.logging.Logger.
- * Levels: 0=ERROR, 1=WARN, 2=INFO, 3=DEBUG, 4=TRACE.
+ * Static dispatch target invoked from Rust via JNI to deliver tracing events
+ * to a java.util.logging.Logger.
  *
+ * The plugin must call {@link #install(Logger)} once before Rust emits any
+ * tracing events; tracing events emitted before install are dropped silently.
+ *
+ * Rust level mapping: 0=ERROR, 1=WARN, 2=INFO, 3=DEBUG, 4=TRACE.
  * Sub-INFO Rust events (DEBUG, TRACE) are emitted at INFO so they survive
- * Paper's appender
- * filtering, with the Rust level name stamped into the target prefix instead.
+ * Paper's appender filtering.
  */
 public final class PaperFfiLogger {
 
-    private static final Level[] LEVELS = {
+    private static final Level[] JAVA_LEVELS = {
             Level.SEVERE,
             Level.WARNING,
             Level.INFO,
@@ -27,24 +26,22 @@ public final class PaperFfiLogger {
 
     private static final String[] RUST_LEVELS = { "ERROR", "WARN", "INFO", "DEBUG", "TRACE" };
 
-    private final Logger logger;
+    private static volatile Logger logger;
 
-    public PaperFfiLogger(Logger logger) {
-        this.logger = logger;
+    private PaperFfiLogger() {
     }
 
-    public void dispatch(int level, MemorySegment targetPtr, int targetLen, MemorySegment msgPtr, int msgLen) {
-        String target = readString(targetPtr, targetLen);
-        String message = readString(msgPtr, msgLen);
-        int idx = Math.max(0, Math.min(level, LEVELS.length - 1));
-        Level effective = idx <= 2 ? LEVELS[idx] : Level.INFO;
-        logger.log(effective, "[" + target + " " + RUST_LEVELS[idx] + "] " + message);
+    public static void install(Logger l) {
+        logger = l;
     }
 
-    private static String readString(MemorySegment ptr, int len) {
-        if (len <= 0)
-            return "";
-        byte[] bytes = ptr.reinterpret(len).toArray(ValueLayout.JAVA_BYTE);
-        return new String(bytes, StandardCharsets.UTF_8);
+    public static void dispatch(int level, String target, String message) {
+        Logger l = logger;
+        if (l == null) {
+            return;
+        }
+        int idx = Math.max(0, Math.min(level, JAVA_LEVELS.length - 1));
+        Level effective = idx <= 2 ? JAVA_LEVELS[idx] : Level.INFO;
+        l.log(effective, "(" + RUST_LEVELS[idx] + ": " + target + ") " + message);
     }
 }

@@ -1,48 +1,59 @@
 package io.disco.plugin;
 
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
-
-import org.bukkit.command.PluginCommand;
+import org.bukkit.Bukkit;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import io.disco.ffi.DiscoFfi;
-import io.disco.ffi.LoggerFnPtr;
+import io.papermc.paper.event.server.ServerResourcesReloadedEvent;
 import io.paperrs.shim.NativeLoader;
 import io.paperrs.shim.PaperFfiLogger;
+import io.paperrs.shim.PaperRs;
 
 public final class DiscoPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        getLogger().info("Disco PoC enabled.");
+        getLogger().info("onEnable: starting Disco PoC");
 
-        String path = System.getProperty("disco.native-lib");
-        if (path == null) {
-            throw new IllegalStateException("Missing disco.native-lib system property");
+        String loaderPath = System.getProperty("paper.loader.path");
+        if (loaderPath == null) {
+            throw new IllegalStateException("Missing paper.loader.path system property");
         }
-        NativeLoader.load(path);
-        getLogger().info("Loaded native lib: " + path);
-
-        // Native function pointer Rust will call to deliver tracing events.
-        PaperFfiLogger logger = new PaperFfiLogger(getLogger());
-        MemorySegment logger_ptr = LoggerFnPtr.allocate(logger::dispatch, Arena.global());
-
-        DiscoFfi.disco_init(logger_ptr);
-        int result = DiscoFfi.disco_ping();
-        getLogger().info("disco_ping() returned: " + result);
-
-        PluginCommand hello = getCommand("hello");
-        if (hello == null) {
-            throw new IllegalStateException("/hello command missing from plugin.yml");
+        String corePath = System.getProperty("disco.core.path");
+        if (corePath == null) {
+            throw new IllegalStateException("Missing disco.core.path system property");
         }
-        hello.setExecutor(new HelloCommand());
+        NativeLoader.load(loaderPath);
+        getLogger().info("onEnable: paper-loader loaded from " + loaderPath);
 
-        getServer().getPluginManager().registerEvents(new SheepListener(), this);
+        PaperFfiLogger.install(getLogger());
+        getLogger().info("onEnable: calling PaperRs.init with core=" + corePath);
+        PaperRs.init(corePath, this);
+
+        // Hook /reload so it cycles us. ServerResourcesReloadedEvent fires
+        // after Paper's /reload finishes its recipe/advancement work; we then
+        // disable + re-enable to load rebuilt Rust code from disk.
+        getServer().getPluginManager().registerEvents(new Listener() {
+            @EventHandler
+            public void onResourcesReloaded(ServerResourcesReloadedEvent event) {
+                getLogger().info("ServerResourcesReloadedEvent (cause=" + event.getCause() + "): cycling Disco");
+                // Defer one tick so the event-handling stack unwinds before we
+                // disable ourselves. Re-enable runs in the same scheduled task.
+                Bukkit.getScheduler().runTaskLater(DiscoPlugin.this, () -> {
+                    Bukkit.getPluginManager().disablePlugin(DiscoPlugin.this);
+                    Bukkit.getPluginManager().enablePlugin(DiscoPlugin.this);
+                }, 1L);
+            }
+        }, this);
+
+        getLogger().info("onEnable: complete");
     }
 
     @Override
     public void onDisable() {
-        getLogger().info("Disco PoC disabled.");
+        getLogger().info("onDisable: calling PaperRs.shutdown");
+        PaperRs.shutdown();
+        getLogger().info("onDisable: complete");
     }
 }

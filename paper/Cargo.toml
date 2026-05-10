@@ -1,14 +1,15 @@
 [package]
-name = "disco-ffi"
+name = "paper"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-paper = { path = "../paper-rs" }
-disco-core = { path = "../disco-core" }
+jni.workspace = true
+jni-sys.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["rlib"]
