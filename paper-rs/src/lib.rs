@@ -1,3 +1,4 @@
+use core::ffi::{c_int, c_uchar};
 use std::sync::OnceLock;
 
 use tracing::{Event, Subscriber};
@@ -7,15 +8,15 @@ use tracing_subscriber::layer::Context;
 /// C ABI function pointer the Java side passes at init time.
 ///
 /// Receives (level, target_ptr, target_len, message_ptr, message_len).
-pub type LogUpcall = unsafe extern "C" fn(i32, *const u8, i32, *const u8, i32);
+pub type LoggerFnPtr = unsafe extern "C" fn(c_int, *const c_uchar, c_int, *const c_uchar, c_int);
 
-static UPCALL: OnceLock<LogUpcall> = OnceLock::new();
+static LOGGER: OnceLock<LoggerFnPtr> = OnceLock::new();
 
 /// Install the function pointer the tracing layer will dispatch to.
 ///
 /// Idempotent: subsequent calls are no-ops.
-pub fn install_upcall(f: LogUpcall) {
-    let _ = UPCALL.set(f);
+pub fn install_upcall(f: LoggerFnPtr) {
+    let _ = LOGGER.set(f);
 }
 
 /// Install a tracing subscriber that routes events through the upcall.
@@ -29,8 +30,8 @@ struct UpcallLayer;
 
 impl<S: Subscriber> Layer<S> for UpcallLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        let Some(f) = UPCALL.get() else { return };
-        let level = match *event.metadata().level() {
+        let Some(f) = LOGGER.get() else { return };
+        let level: c_int = match *event.metadata().level() {
             tracing::Level::ERROR => 0,
             tracing::Level::WARN => 1,
             tracing::Level::INFO => 2,
@@ -45,9 +46,9 @@ impl<S: Subscriber> Layer<S> for UpcallLayer {
             f(
                 level,
                 target.as_ptr(),
-                target.len() as i32,
+                target.len() as c_int,
                 message.as_ptr(),
-                message.len() as i32,
+                message.len() as c_int,
             );
         }
     }
