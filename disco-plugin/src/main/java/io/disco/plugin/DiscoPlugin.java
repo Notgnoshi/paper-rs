@@ -1,10 +1,10 @@
 package io.disco.plugin;
 
-import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import io.paperrs.shim.NativeLoader;
 import io.paperrs.shim.PaperFfiLogger;
+import io.paperrs.shim.PaperRs;
 
 public final class DiscoPlugin extends JavaPlugin {
 
@@ -12,28 +12,24 @@ public final class DiscoPlugin extends JavaPlugin {
     public void onEnable() {
         getLogger().info("Disco PoC enabled.");
 
-        String path = System.getProperty("disco.native-lib");
-        if (path == null) {
-            throw new IllegalStateException("Missing disco.native-lib system property");
+        String loaderPath = System.getProperty("paper.loader.path");
+        if (loaderPath == null) {
+            throw new IllegalStateException("Missing paper.loader.path system property");
         }
-        NativeLoader.load(path);
-        getLogger().info("Loaded native lib: " + path);
+        String corePath = System.getProperty("disco.core.path");
+        if (corePath == null) {
+            throw new IllegalStateException("Missing disco.core.path system property");
+        }
+        NativeLoader.load(loaderPath);
+        getLogger().info("Loaded paper-loader: " + loaderPath);
 
         PaperFfiLogger.install(getLogger());
-
-        PluginCommand hello = getCommand("hello");
-        if (hello == null) {
-            throw new IllegalStateException("/hello command missing from plugin.yml");
-        }
-        hello.setExecutor(new HelloCommand());
-
-        discoStart(this);
+        PaperRs.init(corePath, this);
     }
-
-    private static native void discoStart(Object plugin);
 
     @Override
     public void onDisable() {
+        PaperRs.shutdown();
         getLogger().info("Disco PoC disabled.");
     }
 }

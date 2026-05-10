@@ -1,5 +1,151 @@
 //! `paper-loader` cdylib: the stable JNI surface that Java loads.
 //!
-//! Stage 1 of the loader-shim migration: this crate exists but is empty. Stage 2
-//! will add the Java_io_paperrs_shim_PaperRs_* symbols and the dlopen forwarding
-//! to `disco-core.so`.
+//! Exports `Java_io_paperrs_shim_PaperRs_*` symbols. Each is a thin forwarder
+//! that dispatches via the `CoreApi` function-pointer table obtained from
+//! `disco-core.so` (or whichever core .so the user passes to `init`).
+
+use std::ffi::OsStr;
+use std::mem::size_of;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicPtr, Ordering};
+
+use jni::errors::{Error, ThrowRuntimeExAndDefault};
+use jni::objects::{JClass, JObject, JString};
+use jni::sys::{JNI_FALSE, jboolean, jlong, jobject, jobjectArray};
+use jni::{Env, EnvUnowned};
+use libloading::{Library, Symbol};
+use paper::{CORE_ABI_VERSION, CoreApi};
+
+static CORE_LIB: Mutex<Option<Library>> = Mutex::new(None);
+static CORE_API: AtomicPtr<CoreApi> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Symbol the loader looks up in the core .so. Plugin authors should not need
+/// to know this exists; the `paper` rlib generates the function for them.
+const CORE_INIT_SYMBOL: &[u8] = b"paper_core_init";
+
+type CoreInitFn = unsafe extern "C" fn() -> *const CoreApi;
+
+fn load_core(path: &str) -> Result<*const CoreApi, String> {
+    let lib = unsafe { Library::new(OsStr::new(path)) }
+        .map_err(|e| format!("dlopen({path}) failed: {e}"))?;
+    let init: Symbol<CoreInitFn> = unsafe {
+        lib.get(CORE_INIT_SYMBOL)
+            .map_err(|e| format!("dlsym(paper_core_init) failed: {e}"))?
+    };
+    let api_ptr = unsafe { init() };
+    if api_ptr.is_null() {
+        return Err("paper_core_init returned null".into());
+    }
+    // Safety: trust the core to populate abi_version/size correctly.
+    let api = unsafe { &*api_ptr };
+    if api.abi_version != CORE_ABI_VERSION {
+        return Err(format!(
+            "core ABI version {} does not match loader's {CORE_ABI_VERSION}",
+            api.abi_version,
+        ));
+    }
+    if (api.size as usize) < size_of::<CoreApi>() {
+        return Err(format!(
+            "core CoreApi size {} smaller than loader's {}",
+            api.size,
+            size_of::<CoreApi>(),
+        ));
+    }
+    *CORE_LIB.lock().unwrap() = Some(lib);
+    CORE_API.store(api_ptr as *mut CoreApi, Ordering::SeqCst);
+    Ok(api_ptr)
+}
+
+fn current_api() -> Option<*const CoreApi> {
+    let p = CORE_API.load(Ordering::SeqCst);
+    if p.is_null() {
+        None
+    } else {
+        Some(p as *const CoreApi)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_PaperRs_init<'local>(
+    mut unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    core_path: JString<'local>,
+    plugin: JObject<'local>,
+) {
+    unowned
+        .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
+            let path = core_path.try_to_string(env)?;
+            let api_ptr = load_core(&path).map_err(|msg| {
+                let _ = env.throw(msg);
+                Error::JavaException
+            })?;
+            let rc = unsafe { ((*api_ptr).init)(env.get_raw(), plugin.as_raw()) };
+            if rc != 0 {
+                let _ = env.throw(format!("paper_core init returned {rc}"));
+                return Err(Error::JavaException);
+            }
+            Ok(())
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_PaperRs_shutdown<'local>(
+    mut unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+) {
+    let _ = unowned
+        .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
+            // Stage 2 stub: just call core's shutdown if available; stage 3
+            // adds the dlclose + cache-reset machinery for actual hot reload.
+            if let Some(api) = current_api() {
+                let _ = unsafe { ((*api).shutdown)(env.get_raw()) };
+            }
+            Ok(())
+        })
+        .into_outcome();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchEvent<'local>(
+    unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handler_id: jlong,
+    event: jobject,
+) {
+    let Some(api) = current_api() else { return };
+    // Forward without entering with_env: core's dispatch_event will set up
+    // its own EnvUnowned/with_env from the raw pointer.
+    let raw_env = EnvUnowned::into_raw(unowned);
+    unsafe { ((*api).dispatch_event)(raw_env, handler_id, event) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchCommand<'local>(
+    unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handler_id: jlong,
+    sender: jobject,
+    args: jobjectArray,
+) -> jboolean {
+    let Some(api) = current_api() else {
+        return JNI_FALSE;
+    };
+    let raw_env = EnvUnowned::into_raw(unowned);
+    unsafe { ((*api).dispatch_command)(raw_env, handler_id, sender, args) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchTabComplete<'local>(
+    unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handler_id: jlong,
+    sender: jobject,
+    args: jobjectArray,
+) -> jobject {
+    let Some(api) = current_api() else {
+        return std::ptr::null_mut();
+    };
+    let raw_env = EnvUnowned::into_raw(unowned);
+    unsafe { ((*api).dispatch_tab_complete)(raw_env, handler_id, sender, args) }
+}

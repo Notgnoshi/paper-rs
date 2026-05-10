@@ -1,10 +1,43 @@
 //! `paper` rlib: the framework library for Rust Paper plugins.
 //!
-//! Stage 1 of the loader-shim migration. Currently this crate hosts the JNI
-//! tracing logger bridge. Stage 2 will add `CoreApi`. Stage 4 will expand it
-//! with PluginBuilder, Api, dispatch, and the typed Bukkit wrappers.
+//! Hosts the JNI tracing logger bridge and the `CoreApi` ABI struct that
+//! `paper-loader` and `disco-core` use to communicate across the dlopen boundary.
 
 use std::sync::OnceLock;
+
+use jni_sys::{JNIEnv, jboolean, jlong, jobject, jobjectArray};
+
+/// ABI version of the `CoreApi` struct. Bump when adding fields. Loaders refuse
+/// to load cores with a mismatched version.
+pub const CORE_ABI_VERSION: u32 = 1;
+
+/// The function-pointer table that `disco-core` (and any future plugin core)
+/// hands back to `paper-loader` at init time. paper-loader's JNI symbols
+/// forward to these function pointers for all per-call work.
+///
+/// `paper_core_init` (a free `extern "C"` function in the core cdylib) returns
+/// `*const CoreApi`. The loader then calls the function pointers in this struct
+/// for lifecycle and dispatch.
+#[repr(C)]
+pub struct CoreApi {
+    pub abi_version: u32,
+    pub size: u32,
+    /// Per-plugin init: install the tracing logger, register event/command
+    /// handlers via Bukkit. Returns 0 on success, non-zero on failure.
+    pub init: unsafe extern "C" fn(*mut JNIEnv, jobject) -> i32,
+    /// Per-plugin teardown. Returns 0 on success.
+    pub shutdown: unsafe extern "C" fn(*mut JNIEnv) -> i32,
+    /// Bukkit fired an event registered through this core; look up handler by
+    /// id and invoke it.
+    pub dispatch_event: unsafe extern "C" fn(*mut JNIEnv, jlong, jobject),
+    /// Bukkit dispatched a command registered through this core. Returns
+    /// JNI_TRUE if handled, JNI_FALSE if Bukkit should print usage.
+    pub dispatch_command:
+        unsafe extern "C" fn(*mut JNIEnv, jlong, jobject, jobjectArray) -> jboolean,
+    /// Tab-completion. Returns a Java `List<String>` (jobject) or null.
+    pub dispatch_tab_complete:
+        unsafe extern "C" fn(*mut JNIEnv, jlong, jobject, jobjectArray) -> jobject,
+}
 
 use jni::objects::{JClass, JValue};
 use jni::refs::Global;
