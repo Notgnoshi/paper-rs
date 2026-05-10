@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-paper-rs = { path = "../paper-rs" }
+paper = { path = "../paper-rs" }
 disco-core = { path = "../disco-core" }
 tracing.workspace = true
 

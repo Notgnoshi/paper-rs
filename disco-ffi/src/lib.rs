@@ -1,12 +1,12 @@
 use core::ffi::{c_int, c_uchar};
 
-use paper_rs::LoggerFnPtr;
+use paper::LoggerFnPtr;
 use tracing::info;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn disco_init(log_upcall: LoggerFnPtr) {
-    paper_rs::install_upcall(log_upcall);
-    paper_rs::install_subscriber();
+    paper::install_upcall(log_upcall);
+    paper::install_subscriber();
     info!("disco_init called");
 }
 

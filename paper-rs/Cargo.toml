@@ -1,5 +1,5 @@
 [package]
-name = "paper-rs"
+name = "paper"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -6,4 +6,4 @@ sys_includes = []
 
 [parse]
 parse_deps = true
-include = ["paper-rs"]
+include = ["paper"]
