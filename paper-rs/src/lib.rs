@@ -20,10 +20,16 @@ pub fn install_upcall(f: LoggerFnPtr) {
 }
 
 /// Install a tracing subscriber that routes events through the upcall.
+/// Filtering is controlled by RUST_LOG (default: info).
 pub fn install_subscriber() {
+    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
-    let _ = tracing_subscriber::registry().with(UpcallLayer).try_init();
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(UpcallLayer)
+        .try_init();
 }
 
 struct UpcallLayer;
