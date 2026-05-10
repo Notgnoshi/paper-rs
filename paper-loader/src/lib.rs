@@ -1,9 +1,7 @@
-//! `paper-loader` cdylib: the stable JNI surface that Java loads.
+//! Paper plugin loader.
 //!
-//! Exports `Java_io_paperrs_shim_PaperRs_*` symbols. Each is a thin forwarder
-//! that dispatches via the `CoreApi` function-pointer table obtained from
-//! `disco-core.so` (or whichever core .so the user passes to `init`).
-
+//! Java can't unload a native library once it's been dlopened, so we load a stable plugin loader,
+//! and then dlopen the actual plugin here, so that we can close it and reload it on demand.
 use std::ffi::OsStr;
 use std::mem::size_of;
 use std::sync::Mutex;
@@ -19,11 +17,10 @@ use paper::{CORE_ABI_VERSION, CoreApi};
 static CORE_LIB: Mutex<Option<Library>> = Mutex::new(None);
 static CORE_API: AtomicPtr<CoreApi> = AtomicPtr::new(std::ptr::null_mut());
 
-/// Symbol the loader looks up in the core .so. Plugin authors should not need
-/// to know this exists; the `paper` rlib generates the function for them.
+/// Symbol the loader looks up in the core .so
 const CORE_INIT_SYMBOL: &[u8] = b"paper_core_init";
 
-type CoreInitFn = unsafe extern "C" fn() -> *const CoreApi;
+type CoreInitFn = unsafe extern "C" fn(*mut jni::sys::JNIEnv, jni::sys::jobject) -> *const CoreApi;
 
 /// Drop the cached library + API pointer. Caller must have already invoked
 /// core's shutdown (so the core can release JNI globals before its .so unloads).
@@ -32,14 +29,18 @@ fn unload_core() {
     *CORE_LIB.lock().unwrap() = None;
 }
 
-fn load_core(path: &str) -> Result<*const CoreApi, String> {
+fn load_core(
+    path: &str,
+    env_ptr: *mut jni::sys::JNIEnv,
+    plugin_ptr: jni::sys::jobject,
+) -> Result<*const CoreApi, String> {
     let lib = unsafe { Library::new(OsStr::new(path)) }
         .map_err(|e| format!("dlopen({path}) failed: {e}"))?;
     let init: Symbol<CoreInitFn> = unsafe {
         lib.get(CORE_INIT_SYMBOL)
             .map_err(|e| format!("dlsym(paper_core_init) failed: {e}"))?
     };
-    let api_ptr = unsafe { init() };
+    let api_ptr = unsafe { init(env_ptr, plugin_ptr) };
     if api_ptr.is_null() {
         return Err("paper_core_init returned null".into());
     }
@@ -89,18 +90,11 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_init<'local>(
                 unload_core();
             }
             eprintln!("paper-loader: dlopen({path})");
-            let api_ptr = load_core(&path).map_err(|msg| {
+            let _api_ptr = load_core(&path, env.get_raw(), plugin.as_raw()).map_err(|msg| {
                 eprintln!("paper-loader: load_core failed: {msg}");
                 let _ = env.throw(msg);
                 Error::JavaException
             })?;
-            eprintln!("paper-loader: dlopen ok, calling core init");
-            let rc = unsafe { ((*api_ptr).init)(env.get_raw(), plugin.as_raw()) };
-            if rc != 0 {
-                eprintln!("paper-loader: core init returned {rc}");
-                let _ = env.throw(format!("paper_core init returned {rc}"));
-                return Err(Error::JavaException);
-            }
             eprintln!("paper-loader: init complete");
             Ok(())
         })
