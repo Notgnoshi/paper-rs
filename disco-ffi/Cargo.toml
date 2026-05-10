@@ -9,6 +9,7 @@ rust-version.workspace = true
 paper = { path = "../paper-rs" }
 disco-core = { path = "../disco-core" }
 tracing.workspace = true
+jni.workspace = true
 
 [lib]
 crate-type = ["cdylib"]

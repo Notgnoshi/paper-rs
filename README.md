@@ -14,48 +14,6 @@ An attempt at making a Paper Minecraft plugin in Rust
 
 <https://rust-lang.org/tools/install/>
 
-### Cap'n Proto 1.0.1
-
-```sh
-# Fedora
-sudo dnf install capnproto capnproto-devel
-# Ubuntu
-sudo apt install capnproto libcapnp-dev
-```
-
-And the Java Cap'n Proto compiler:
-
-```sh
-git clone https://github.com/capnproto/capnproto-java.git /tmp/capnproto-java
-pushd /tmp/capnproto-java
-make
-PREFIX=$HOME/.local make install
-popd
-```
-
-You may want to unset `PREFIX` and `sudo make install` to the default `/usr/local` if you want to
-use capnproto-java system-wide.
-
-### cbindgen
-
-```sh
-sudo dnf install clang-devel
-cargo install cbindgen
-```
-
-### jextract
-
-```sh
-curl -fsSL "https://download.java.net/java/early_access/jextract/25/2/openjdk-25-jextract+2-4_linux-x64_bin.tar.gz" -o /tmp/jextract.tar.gz
-tar -xzvf /tmp/jextract.tar.gz -C ~/.local/share/
-# jextract can't be executed from a symlink, as it resolves the path to its runtime from $0
-cat > ~/.local/bin/jextract << EOF
-#!/bin/sh
-exec ~/.local/share/jextract-25/bin/jextract "\$@"
-EOF
-chmod +x ~/.local/bin/jextract
-```
-
 ### Java 25 and Gradle
 
 ```sh

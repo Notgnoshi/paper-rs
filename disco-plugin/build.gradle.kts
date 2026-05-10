@@ -32,6 +32,7 @@ tasks.runServer {
     minecraftVersion(mcVersion)
     runDirectory.set(rootProject.layout.projectDirectory.dir("run"))
     systemProperty("disco.native-lib", native_lib)
+    environment("RUST_LOG", System.getenv("RUST_LOG") ?: "DEBUG")
     // Auto-accept Mojang's EULA for the dev server (https://www.minecraft.net/en-us/eula).
     doFirst {
         runDirectory.get().asFile.mkdirs()

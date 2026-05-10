@@ -9,5 +9,6 @@ license = "MIT"
 rust-version = "1.95.0"
 
 [workspace.dependencies]
+jni = "0.22"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
