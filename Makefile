@@ -1,4 +1,5 @@
-GRADLE_VERSION := 9.5.0
+GRADLE_VERSION ?= 9.5.0
+RUST_LOG ?= DEBUG
 
 .PHONY: all
 all: disco-plugin
@@ -29,7 +30,7 @@ bindings: cargo
 
 .PHONY: run
 run: disco-plugin
-	./gradlew :disco-plugin:runServer -PnativeLib=$(abspath target/release/libdisco_ffi.so)
+	RUST_LOG=$(RUST_LOG) ./gradlew :disco-plugin:runServer -Pnative-lib=$(abspath target/release/libdisco_ffi.so)
 
 .PHONY: clean clean-all
 clean:
