@@ -2,6 +2,12 @@
 
 An attempt at making a Paper Minecraft plugin in Rust
 
+## How to use
+
+1. Install the dependencies below
+2. Build with `make`
+3. Run a development server with the plugin(s) loaded with `make run`
+
 ## Dependencies
 
 ### Rust 1.95
