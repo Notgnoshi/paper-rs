@@ -30,7 +30,7 @@ fn handle_interact<'l>(api: &mut Api<'_, 'l>, event: &PlayerInteractEntityEventR
 /// Build the greeting reply for the /hello command.
 pub fn hello(name: &str) -> String {
     tracing::debug!("Greeting {name}");
-    format!("Hello, {name}!")
+    format!("<green>Hello, <yellow>{name}</yellow>!")
 }
 
 fn handle_hello(api: &mut Api, sender: &CommandSender, args: &[String]) -> bool {

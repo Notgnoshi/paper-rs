@@ -45,14 +45,45 @@ impl<'local> CommandSender<'local> {
         name_jstr.try_to_string(env)
     }
 
+    /// Send a styled message.
+    ///
+    /// The input is parsed as [MiniMessage](https://docs.advntr.dev/minimessage/index.html), so
+    /// `<green>hello, <yellow>world</yellow>` produces colored text. Plain text without tags
+    /// renders unstyled.
+    ///
+    /// To bypass MiniMessage parsing (e.g., for user-controlled content where `<` shouldn't be
+    /// interpreted as a tag), use [send_plain](Self::send_plain)
     pub fn send_message(&self, api: &mut Api, msg: impl AsRef<str>) -> jni::errors::Result<()> {
         let env = api.jni();
-        let jstr = env.new_string(msg.as_ref())?;
+        let component = super::mini_message::deserialize(env, msg.as_ref())?;
         env.call_method(
             &self.obj,
             jni_str!("sendMessage"),
-            jni_sig!("(Ljava/lang/String;)V"),
-            &[JValue::Object(&jstr)],
+            jni_sig!("(Lnet/kyori/adventure/text/Component;)V"),
+            &[JValue::Object(&component)],
+        )?;
+        Ok(())
+    }
+
+    /// Send a literal text message with no MiniMessage parsing or styling.
+    ///
+    /// Use for user-controlled content or anywhere `<` characters should be preserved as-is.
+    pub fn send_plain(&self, api: &mut Api, msg: impl AsRef<str>) -> jni::errors::Result<()> {
+        let env = api.jni();
+        let jstr = env.new_string(msg.as_ref())?;
+        let component = env
+            .call_static_method(
+                jni_str!("net/kyori/adventure/text/Component"),
+                jni_str!("text"),
+                jni_sig!("(Ljava/lang/String;)Lnet/kyori/adventure/text/TextComponent;"),
+                &[JValue::Object(&jstr)],
+            )?
+            .l()?;
+        env.call_method(
+            &self.obj,
+            jni_str!("sendMessage"),
+            jni_sig!("(Lnet/kyori/adventure/text/Component;)V"),
+            &[JValue::Object(&component)],
         )?;
         Ok(())
     }

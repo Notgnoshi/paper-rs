@@ -25,6 +25,7 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
             env.exception_clear();
         }
         dispatch::clear_handlers();
+        crate::bukkit::mini_message::shutdown();
         logger::shutdown_logger();
         Ok(())
     });
