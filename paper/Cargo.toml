@@ -7,5 +7,9 @@ rust-version.workspace = true
 
 [dependencies]
 jni.workspace = true
+jni-sys.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[lib]
+crate-type = ["rlib"]

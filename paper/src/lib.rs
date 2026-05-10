@@ -1,3 +1,9 @@
+//! `paper` rlib: the framework library for Rust Paper plugins.
+//!
+//! Stage 1 of the loader-shim migration. Currently this crate hosts the JNI
+//! tracing logger bridge. Stage 2 will add `CoreApi`. Stage 4 will expand it
+//! with PluginBuilder, Api, dispatch, and the typed Bukkit wrappers.
+
 use std::sync::OnceLock;
 
 use jni::objects::{JClass, JValue};

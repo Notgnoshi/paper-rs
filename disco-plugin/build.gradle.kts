@@ -26,7 +26,7 @@ dependencies {
 // Path to the Rust cdylib
 val native_lib: String = (project.findProperty("native-lib") as String?)
     ?: rootProject.layout.projectDirectory
-        .file("target/release/libdisco_ffi.so").asFile.absolutePath
+        .file("target/release/libdisco_core.so").asFile.absolutePath
 
 tasks.runServer {
     minecraftVersion(mcVersion)

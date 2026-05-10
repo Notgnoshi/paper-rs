@@ -6,4 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+jni.workspace = true
+paper.workspace = true
 tracing.workspace = true
+
+[lib]
+crate-type = ["cdylib"]

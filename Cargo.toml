@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["disco-core", "disco-ffi", "paper-rs"]
+members = ["disco-core", "paper", "paper-loader"]
 
 [workspace.package]
 version = "0.0.1-rc0"
@@ -10,5 +10,8 @@ rust-version = "1.95.0"
 
 [workspace.dependencies]
 jni = "0.22"
+jni-sys = "0.4"
+libloading = "0.9"
+paper = { path = "paper" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
