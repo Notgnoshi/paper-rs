@@ -1,0 +1,25 @@
+# Rust
+/target
+Cargo.lock
+
+# Gradle
+.gradle/
+build/
+gradle.properties.local
+
+# Gradle wrapper
+/gradlew
+/gradlew.bat
+/gradle/
+
+# Paper dev server working dir
+/run/
+
+# Generated bindings
+disco-plugin/src/main/java/io/disco/ffi/
+
+# Eclipse / JDT (jdt.ls, VS Code Java, etc.)
+.project
+.classpath
+.settings/
+bin/
