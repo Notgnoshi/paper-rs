@@ -3,6 +3,7 @@ use jni_sys::{JNIEnv, jboolean, jlong, jobject, jobjectArray};
 
 mod api;
 mod builder;
+pub mod bukkit;
 mod core_init;
 mod dispatch;
 mod logger;
