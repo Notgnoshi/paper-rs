@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 use std::mem::size_of;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use jni::objects::{JObject, JObjectArray, JString, JValue};
+use jni::refs::Global;
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jlong, jobject, jobjectArray};
 use jni::{Env, EnvUnowned, jni_sig, jni_str};
 use paper::{CORE_ABI_VERSION, CoreApi};
@@ -25,20 +26,26 @@ type EventHandler = Box<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>) + Send + Sync
 type CommandHandler =
     Box<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>, &[String]) -> bool + Send + Sync>;
 
-static EVENT_HANDLERS: OnceLock<Mutex<HashMap<i64, EventHandler>>> = OnceLock::new();
-static COMMAND_HANDLERS: OnceLock<Mutex<HashMap<i64, CommandHandler>>> = OnceLock::new();
+static EVENT_HANDLERS: Mutex<Option<HashMap<i64, EventHandler>>> = Mutex::new(None);
+static COMMAND_HANDLERS: Mutex<Option<HashMap<i64, CommandHandler>>> = Mutex::new(None);
+/// Tracks `RustCommand` instances we registered with Bukkit's CommandMap so we
+/// can `unregister` them on shutdown. Otherwise stale instances accumulate
+/// across /reload cycles, each pointing at a defunct handlerId.
+static REGISTERED_COMMANDS: Mutex<Vec<Global<JObject<'static>>>> = Mutex::new(Vec::new());
 static NEXT_HANDLER_ID: AtomicI64 = AtomicI64::new(1);
-
-fn event_handlers() -> &'static Mutex<HashMap<i64, EventHandler>> {
-    EVENT_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn command_handlers() -> &'static Mutex<HashMap<i64, CommandHandler>> {
-    COMMAND_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
-}
 
 fn next_handler_id() -> i64 {
     NEXT_HANDLER_ID.fetch_add(1, Ordering::SeqCst)
+}
+
+fn insert_event_handler(id: i64, handler: EventHandler) {
+    let mut guard = EVENT_HANDLERS.lock().unwrap();
+    guard.get_or_insert_with(HashMap::new).insert(id, handler);
+}
+
+fn insert_command_handler(id: i64, handler: CommandHandler) {
+    let mut guard = COMMAND_HANDLERS.lock().unwrap();
+    guard.get_or_insert_with(HashMap::new).insert(id, handler);
 }
 
 // ---- Bukkit registration helpers --------------------------------------------
@@ -54,7 +61,7 @@ fn subscribe_event<'local>(
     handler: EventHandler,
 ) -> jni::errors::Result<()> {
     let handler_id = next_handler_id();
-    event_handlers().lock().unwrap().insert(handler_id, handler);
+    insert_event_handler(handler_id, handler);
 
     let event_class = env.find_class(event_class_name)?;
     let executor = env.new_object(
@@ -112,10 +119,7 @@ fn register_command<'local>(
     handler: CommandHandler,
 ) -> jni::errors::Result<()> {
     let handler_id = next_handler_id();
-    command_handlers()
-        .lock()
-        .unwrap()
-        .insert(handler_id, handler);
+    insert_command_handler(handler_id, handler);
 
     let name_jstr = env.new_string(name)?;
     let command = env.new_object(
@@ -146,6 +150,43 @@ fn register_command<'local>(
         jni_sig!("(Ljava/lang/String;Lorg/bukkit/command/Command;)Z"),
         &[JValue::Object(&fallback), JValue::Object(&command)],
     )?;
+    let cmd_global = env.new_global_ref(&command)?;
+    REGISTERED_COMMANDS.lock().unwrap().push(cmd_global);
+    Ok(())
+}
+
+/// Walk the tracked `RustCommand` instances and call `Command.unregister(commandMap)`
+/// on each so they don't pile up in Bukkit's CommandMap across /reload cycles.
+fn unregister_commands(env: &mut Env<'_>) -> jni::errors::Result<()> {
+    let commands = std::mem::take(&mut *REGISTERED_COMMANDS.lock().unwrap());
+    if commands.is_empty() {
+        return Ok(());
+    }
+    let server = env
+        .call_static_method(
+            jni_str!("org/bukkit/Bukkit"),
+            jni_str!("getServer"),
+            jni_sig!("()Lorg/bukkit/Server;"),
+            &[],
+        )?
+        .l()?;
+    let command_map = env
+        .call_method(
+            &server,
+            jni_str!("getCommandMap"),
+            jni_sig!("()Lorg/bukkit/command/CommandMap;"),
+            &[],
+        )?
+        .l()?;
+    for cmd in commands {
+        let _ = env.call_method(
+            &cmd,
+            jni_str!("unregister"),
+            jni_sig!("(Lorg/bukkit/command/CommandMap;)Z"),
+            &[JValue::Object(&command_map)],
+        );
+        // cmd's Drop calls DeleteGlobalRef when this scope ends.
+    }
     Ok(())
 }
 
@@ -251,10 +292,33 @@ unsafe extern "C" fn core_init(env: *mut jni::sys::JNIEnv, plugin: jobject) -> i
     }
 }
 
-unsafe extern "C" fn core_shutdown(_env: *mut jni::sys::JNIEnv) -> i32 {
-    // Stage 3 implements proper cleanup; stage 2 just logs.
-    info!("paper_core_shutdown (stage 2 stub)");
-    0
+unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
+    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
+    let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
+        info!("paper_core_shutdown: cleaning up");
+        if let Err(e) = unregister_commands(env) {
+            warn!("unregister_commands failed: {e}");
+            let _ = env.exception_clear();
+        }
+        // Drop handler registries; closures + their captures get freed here,
+        // while the .so is still mapped so any Drop impl is reachable.
+        *EVENT_HANDLERS.lock().unwrap() = None;
+        *COMMAND_HANDLERS.lock().unwrap() = None;
+        // Release the cached PaperFfiLogger Global ref before the .so unloads.
+        paper::shutdown_logger();
+        Ok(())
+    });
+    match outcome.into_outcome() {
+        jni::Outcome::Ok(_) => 0,
+        jni::Outcome::Err(e) => {
+            warn!("core_shutdown failed: {e}");
+            1
+        }
+        jni::Outcome::Panic(_) => {
+            warn!("core_shutdown panicked");
+            2
+        }
+    }
 }
 
 unsafe extern "C" fn core_dispatch_event(
@@ -265,7 +329,10 @@ unsafe extern "C" fn core_dispatch_event(
     let mut unowned = unsafe { EnvUnowned::from_raw(env) };
     let _ = unowned
         .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            let map = event_handlers().lock().unwrap();
+            let map_guard = EVENT_HANDLERS.lock().unwrap();
+            let Some(map) = map_guard.as_ref() else {
+                return Ok(());
+            };
             let Some(handler) = map.get(&handler_id) else {
                 warn!("no event handler registered for id {handler_id}");
                 return Ok(());
@@ -285,7 +352,10 @@ unsafe extern "C" fn core_dispatch_command(
 ) -> jboolean {
     let mut unowned = unsafe { EnvUnowned::from_raw(env) };
     let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<bool> {
-        let map = command_handlers().lock().unwrap();
+        let map_guard = COMMAND_HANDLERS.lock().unwrap();
+        let Some(map) = map_guard.as_ref() else {
+            return Ok(false);
+        };
         let Some(handler) = map.get(&handler_id) else {
             warn!("no command handler registered for id {handler_id}");
             return Ok(false);

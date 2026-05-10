@@ -4,5 +4,6 @@ main: io.disco.plugin.DiscoPlugin
 api-version: '26.1.2'
 description: PoC plugin proving Paper + Rust feasibility via paper-loader.
 author: Austin Gill
-# commands are registered programmatically from Rust via the CommandMap; no
-# `commands:` section needed here.
+# Commands are registered programmatically from Rust via the CommandMap.
+# The plugin self-cycles in response to ServerResourcesReloadedEvent
+# (i.e. plain /reload) to apply rebuilt Rust code.

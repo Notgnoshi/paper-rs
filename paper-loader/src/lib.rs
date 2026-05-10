@@ -25,6 +25,13 @@ const CORE_INIT_SYMBOL: &[u8] = b"paper_core_init";
 
 type CoreInitFn = unsafe extern "C" fn() -> *const CoreApi;
 
+/// Drop the cached library + API pointer. Caller must have already invoked
+/// core's shutdown (so the core can release JNI globals before its .so unloads).
+fn unload_core() {
+    CORE_API.store(std::ptr::null_mut(), Ordering::SeqCst);
+    *CORE_LIB.lock().unwrap() = None;
+}
+
 fn load_core(path: &str) -> Result<*const CoreApi, String> {
     let lib = unsafe { Library::new(OsStr::new(path)) }
         .map_err(|e| format!("dlopen({path}) failed: {e}"))?;
@@ -72,18 +79,29 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_init<'local>(
     core_path: JString<'local>,
     plugin: JObject<'local>,
 ) {
+    eprintln!("paper-loader: init entered");
     unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
             let path = core_path.try_to_string(env)?;
+            if let Some(api) = current_api() {
+                eprintln!("paper-loader: stale CoreApi present; running shutdown before re-load");
+                let _ = unsafe { ((*api).shutdown)(env.get_raw()) };
+                unload_core();
+            }
+            eprintln!("paper-loader: dlopen({path})");
             let api_ptr = load_core(&path).map_err(|msg| {
+                eprintln!("paper-loader: load_core failed: {msg}");
                 let _ = env.throw(msg);
                 Error::JavaException
             })?;
+            eprintln!("paper-loader: dlopen ok, calling core init");
             let rc = unsafe { ((*api_ptr).init)(env.get_raw(), plugin.as_raw()) };
             if rc != 0 {
+                eprintln!("paper-loader: core init returned {rc}");
                 let _ = env.throw(format!("paper_core init returned {rc}"));
                 return Err(Error::JavaException);
             }
+            eprintln!("paper-loader: init complete");
             Ok(())
         })
         .resolve::<ThrowRuntimeExAndDefault>()
@@ -94,12 +112,17 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_shutdown<'local>(
     mut unowned: EnvUnowned<'local>,
     _class: JClass<'local>,
 ) {
+    eprintln!("paper-loader: shutdown entered");
     let _ = unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
-            // Stage 2 stub: just call core's shutdown if available; stage 3
-            // adds the dlclose + cache-reset machinery for actual hot reload.
             if let Some(api) = current_api() {
+                eprintln!("paper-loader: calling core shutdown");
                 let _ = unsafe { ((*api).shutdown)(env.get_raw()) };
+                eprintln!("paper-loader: dropping core library (dlclose)");
+                unload_core();
+                eprintln!("paper-loader: unload complete");
+            } else {
+                eprintln!("paper-loader: no CoreApi to shutdown");
             }
             Ok(())
         })
