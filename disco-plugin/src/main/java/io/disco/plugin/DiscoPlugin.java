@@ -3,6 +3,7 @@ package io.disco.plugin;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import io.disco.ffi.DiscoFfi;
@@ -30,6 +31,12 @@ public final class DiscoPlugin extends JavaPlugin {
         DiscoFfi.disco_init(logger_ptr);
         int result = DiscoFfi.disco_ping();
         getLogger().info("disco_ping() returned: " + result);
+
+        PluginCommand hello = getCommand("hello");
+        if (hello == null) {
+            throw new IllegalStateException("/hello command missing from plugin.yml");
+        }
+        hello.setExecutor(new HelloCommand());
     }
 
     @Override
