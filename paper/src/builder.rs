@@ -6,6 +6,24 @@ use crate::bukkit::CommandSenderInst;
 use crate::bukkit::event::Event;
 use crate::{dispatch, registration};
 
+/// Best-effort lookup of `obj.getClass().getName()` for diagnostic logging.
+///
+/// Returns `<unknown>` on any JNI failure and clears the resulting exception so the caller's
+/// subsequent `exception_clear` is unnecessary on this path.
+fn actual_class_name(env: &mut Env<'_>, obj: &JObject<'_>) -> String {
+    match (|| -> jni::errors::Result<String> {
+        let class = env.get_object_class(obj)?;
+        let name_jstr = class.get_name(env)?;
+        name_jstr.try_to_string(env)
+    })() {
+        Ok(s) => s,
+        Err(_) => {
+            env.exception_clear();
+            "<unknown>".to_string()
+        }
+    }
+}
+
 pub struct PluginBuilder<'a, 'local> {
     pub(crate) env: &'a mut Env<'local>,
     pub(crate) plugin: &'a JObject<'local>,
@@ -32,6 +50,17 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
                 Ok(wrapper) => {
                     let mut api = Api::new(env);
                     handler(&mut api, wrapper);
+                }
+                Err(jni::errors::Error::WrongObjectType) => {
+                    // Bukkit subclasses that don't declare their own static HandlerList share
+                    // the parent class's list, so fires of sibling/parent events get routed
+                    // here. Skipping is correct; this is the normal case for many events.
+                    tracing::debug!(
+                        "event skipped: expected {:?}, actual {}",
+                        E::CLASS_NAME.as_cstr(),
+                        actual_class_name(env, obj),
+                    );
+                    env.exception_clear();
                 }
                 Err(e) => {
                     tracing::warn!(
