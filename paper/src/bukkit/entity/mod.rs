@@ -3,8 +3,10 @@ use jni::strings::JNIStr;
 
 use crate::api::Api;
 
+mod player;
 mod sheep;
 
+pub use player::Player;
 pub use sheep::Sheep;
 
 /// Type-erased wrapper for an `org.bukkit.entity.Entity` JNI reference.

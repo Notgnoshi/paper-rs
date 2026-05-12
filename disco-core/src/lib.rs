@@ -1,5 +1,8 @@
 use jni::sys::{JNIEnv, jobject};
-use paper::bukkit::event::{PlayerInteractEntityEvent, PlayerInteractEntityEventRef};
+use paper::bukkit::event::{
+    EntityDamageByEntityEvent, EntityDamageByEntityEventRef, PlayerInteractEntityEvent,
+    PlayerInteractEntityEventRef,
+};
 use paper::bukkit::{CommandSender, CommandSenderInst, DyeColor, Sheep};
 use paper::{Api, CoreApi, PluginBuilder};
 
@@ -7,8 +10,33 @@ use paper::{Api, CoreApi, PluginBuilder};
 pub extern "C" fn paper_core_init(env: *mut JNIEnv, plugin: jobject) -> *const CoreApi {
     paper::core_init(env, plugin, |b: &mut PluginBuilder| {
         b.on::<PlayerInteractEntityEvent>(handle_interact);
+        b.on::<EntityDamageByEntityEvent>(handle_sheep_damaged);
         b.command("hello", handle_hello);
     })
+}
+
+fn handle_sheep_damaged<'l>(api: &mut Api<'_, 'l>, event: &EntityDamageByEntityEventRef<'l>) {
+    let entity = match event.entity(api) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("getEntity failed: {e}");
+            return;
+        }
+    };
+    if entity.cast::<Sheep>(api).is_none() {
+        return;
+    }
+    let player = match event.player_attacker(api) {
+        Ok(Some(p)) => p,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!("player_attacker failed: {e}");
+            return;
+        }
+    };
+    if let Err(e) = player.send_message(api, "<yellow>BAAA?!") {
+        tracing::warn!("send_message failed: {e}");
+    }
 }
 
 fn handle_interact<'l>(api: &mut Api<'_, 'l>, event: &PlayerInteractEntityEventRef<'l>) {

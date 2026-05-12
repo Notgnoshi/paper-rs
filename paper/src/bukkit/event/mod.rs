@@ -2,8 +2,10 @@ use jni::Env;
 use jni::objects::JObject;
 use jni::strings::JNIStr;
 
+mod entity_damage_by_entity_event;
 mod player_interact_entity_event;
 
+pub use entity_damage_by_entity_event::{EntityDamageByEntityEvent, EntityDamageByEntityEventRef};
 pub use player_interact_entity_event::{PlayerInteractEntityEvent, PlayerInteractEntityEventRef};
 
 /// Trait implemented by event marker types.

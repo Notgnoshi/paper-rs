@@ -1,0 +1,114 @@
+use jni::objects::JObject;
+use jni::strings::JNIStr;
+use jni::{Env, jni_sig, jni_str};
+
+use super::Event;
+use crate::api::Api;
+use crate::bukkit::{Entity, EntityInst, Player};
+
+/// Marker type. Used in `PluginBuilder::on::<EntityDamageByEntityEvent>`.
+pub struct EntityDamageByEntityEvent;
+
+/// Wrapper for an `org.bukkit.event.entity.EntityDamageByEntityEvent` JNI reference.
+///
+/// `#[repr(transparent)]` so dispatch can reinterpret a borrowed `&JObject` as a borrowed
+/// `&EntityDamageByEntityEventRef`.
+#[repr(transparent)]
+pub struct EntityDamageByEntityEventRef<'local> {
+    obj: JObject<'local>,
+}
+
+impl Event for EntityDamageByEntityEvent {
+    type Wrapper<'local> = EntityDamageByEntityEventRef<'local>;
+    const CLASS_NAME: &'static JNIStr =
+        jni_str!("org/bukkit/event/entity/EntityDamageByEntityEvent");
+
+    fn wrap<'a, 'local>(
+        env: &mut Env<'_>,
+        obj: &'a JObject<'local>,
+    ) -> jni::errors::Result<&'a Self::Wrapper<'local>> {
+        let class = env.find_class(Self::CLASS_NAME)?;
+        if !env.is_instance_of(obj, &class)? {
+            return Err(jni::errors::Error::WrongObjectType);
+        }
+        // SAFETY: just verified instanceof; EntityDamageByEntityEventRef is repr(transparent)
+        // over JObject<'local>.
+        Ok(unsafe {
+            &*(obj as *const JObject<'local> as *const EntityDamageByEntityEventRef<'local>)
+        })
+    }
+}
+
+impl<'local> EntityDamageByEntityEventRef<'local> {
+    /// The entity being damaged.
+    pub fn entity(&self, api: &mut Api<'_, 'local>) -> jni::errors::Result<EntityInst<'local>> {
+        let env = api.jni();
+        let entity = env
+            .call_method(
+                &self.obj,
+                jni_str!("getEntity"),
+                jni_sig!("()Lorg/bukkit/entity/Entity;"),
+                &[],
+            )?
+            .l()?;
+        Ok(EntityInst::new(entity))
+    }
+
+    /// The entity that dealt the damage.
+    ///
+    /// For projectile damage this is the projectile itself (e.g., an arrow); to find the
+    /// player who ultimately caused the damage, use [`player_attacker`](Self::player_attacker).
+    pub fn damager(&self, api: &mut Api<'_, 'local>) -> jni::errors::Result<EntityInst<'local>> {
+        let env = api.jni();
+        let entity = env
+            .call_method(
+                &self.obj,
+                jni_str!("getDamager"),
+                jni_sig!("()Lorg/bukkit/entity/Entity;"),
+                &[],
+            )?
+            .l()?;
+        Ok(EntityInst::new(entity))
+    }
+
+    /// If the damage was ultimately caused by a player (directly, or via a player-shot
+    /// projectile / thrown potion), returns that player. Otherwise `None`.
+    ///
+    /// `damager` itself returns the immediate damaging entity, which for projectiles is the
+    /// projectile, not the shooter. This helper walks one level of indirection through
+    /// `Projectile.getShooter()` so callers don't have to.
+    pub fn player_attacker(
+        &self,
+        api: &mut Api<'_, 'local>,
+    ) -> jni::errors::Result<Option<Player<'local>>> {
+        let damager = self.damager(api)?;
+        let env = api.jni();
+        let player_class = env.find_class(jni_str!("org/bukkit/entity/Player"))?;
+
+        // Direct player damage: punch, sword, etc.
+        if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &player_class)? {
+            // SAFETY: verified instanceof Player.
+            return Ok(Some(unsafe { <Player as Entity>::from_obj(damager.obj) }));
+        }
+
+        // Projectile damage: arrow, thrown potion, trident, etc. Check the shooter.
+        let projectile_class = env.find_class(jni_str!("org/bukkit/entity/Projectile"))?;
+        if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &projectile_class)? {
+            let shooter_obj = env
+                .call_method(
+                    &damager.obj,
+                    jni_str!("getShooter"),
+                    jni_sig!("()Lorg/bukkit/projectiles/ProjectileSource;"),
+                    &[],
+                )?
+                .l()?;
+            // JNI's IsInstanceOf returns TRUE for null, so null-check first.
+            if !shooter_obj.is_null() && env.is_instance_of(&shooter_obj, &player_class)? {
+                // SAFETY: verified non-null and instanceof Player.
+                return Ok(Some(unsafe { <Player as Entity>::from_obj(shooter_obj) }));
+            }
+        }
+
+        Ok(None)
+    }
+}
