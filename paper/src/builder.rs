@@ -2,7 +2,7 @@ use jni::Env;
 use jni::objects::JObject;
 
 use crate::api::Api;
-use crate::bukkit::CommandSender;
+use crate::bukkit::CommandSenderInst;
 use crate::bukkit::event::Event;
 use crate::{dispatch, registration};
 
@@ -58,7 +58,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
     pub fn command(
         &mut self,
         name: &str,
-        handler: impl for<'b, 'l> Fn(&mut Api<'b, 'l>, &CommandSender<'l>, &[String]) -> bool
+        handler: impl for<'b, 'l> Fn(&mut Api<'b, 'l>, &CommandSenderInst<'l>, &[String]) -> bool
         + Send
         + Sync
         + 'static,
@@ -66,8 +66,8 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
         let id = dispatch::next_handler_id();
         dispatch::insert_command_handler(
             id,
-            Box::new(
-                move |env, sender_obj, args| match CommandSender::wrap_ref(env, sender_obj) {
+            Box::new(move |env, sender_obj, args| {
+                match CommandSenderInst::wrap_ref(env, sender_obj) {
                     Ok(sender) => {
                         let mut api = Api::new(env);
                         handler(&mut api, sender, args)
@@ -77,8 +77,8 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
                         env.exception_clear();
                         false
                     }
-                },
-            ),
+                }
+            }),
         );
         if let Err(e) = registration::register_command(self.env, self.plugin, name, id) {
             tracing::warn!("registering command {name:?} failed: {e}");

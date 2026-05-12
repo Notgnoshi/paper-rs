@@ -7,16 +7,18 @@ mod sheep;
 
 pub use sheep::Sheep;
 
-/// Wrapper for an `org.bukkit.entity.Entity` JNI reference.
+/// Type-erased wrapper for an `org.bukkit.entity.Entity` JNI reference.
 ///
-/// `#[repr(transparent)]` so paper-rs can reinterpret a borrowed `&JObject` as a borrowed `&Entity`
-/// at dispatch time.
+/// Use [`EntityInst::cast`] to narrow to a specific subtype like [`Sheep`].
+///
+/// `#[repr(transparent)]` so paper-rs can reinterpret a borrowed `&JObject` as a borrowed
+/// `&EntityInst` at dispatch time.
 #[repr(transparent)]
-pub struct Entity<'local> {
+pub struct EntityInst<'local> {
     pub(crate) obj: JObject<'local>,
 }
 
-impl<'local> Entity<'local> {
+impl<'local> EntityInst<'local> {
     pub(crate) fn new(obj: JObject<'local>) -> Self {
         Self { obj }
     }
@@ -32,7 +34,7 @@ impl<'local> Entity<'local> {
     /// ```
     pub fn cast<T>(self, api: &mut Api) -> Option<T>
     where
-        T: IsEntity<'local>,
+        T: Entity<'local>,
     {
         let env = api.jni();
         let class = env.find_class(T::CLASS_NAME).ok()?;
@@ -45,8 +47,11 @@ impl<'local> Entity<'local> {
     }
 }
 
-/// Marker trait for entity subtypes that paper-rs has typed wrappers for.
-pub trait IsEntity<'local>: Sized {
+/// Rust trait mirror of Bukkit's `org.bukkit.entity.Entity` interface.
+///
+/// Currently carries the narrowing infrastructure (`CLASS_NAME`, `from_obj`) used by
+/// [`EntityInst::cast`]. Interface methods will be added as default impls when callers need them.
+pub trait Entity<'local>: Sized {
     const CLASS_NAME: &'static JNIStr;
     /// # SAFETY
     ///

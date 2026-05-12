@@ -4,7 +4,7 @@ use jni::{Env, jni_sig, jni_str};
 
 use super::Event;
 use crate::api::Api;
-use crate::bukkit::Entity;
+use crate::bukkit::EntityInst;
 
 /// Marker type. Used in `PluginBuilder::on::<PlayerInteractEntityEvent>`.
 pub struct PlayerInteractEntityEvent;
@@ -42,7 +42,10 @@ impl Event for PlayerInteractEntityEvent {
 }
 
 impl<'local> PlayerInteractEntityEventRef<'local> {
-    pub fn right_clicked(&self, api: &mut Api<'_, 'local>) -> jni::errors::Result<Entity<'local>> {
+    pub fn right_clicked(
+        &self,
+        api: &mut Api<'_, 'local>,
+    ) -> jni::errors::Result<EntityInst<'local>> {
         let env = api.jni();
         let entity = env
             .call_method(
@@ -52,6 +55,6 @@ impl<'local> PlayerInteractEntityEventRef<'local> {
                 &[],
             )?
             .l()?;
-        Ok(Entity::new(entity))
+        Ok(EntityInst::new(entity))
     }
 }

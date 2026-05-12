@@ -1,6 +1,6 @@
 use jni::sys::{JNIEnv, jobject};
 use paper::bukkit::event::{PlayerInteractEntityEvent, PlayerInteractEntityEventRef};
-use paper::bukkit::{CommandSender, DyeColor, Sheep};
+use paper::bukkit::{CommandSender, CommandSenderInst, DyeColor, Sheep};
 use paper::{Api, CoreApi, PluginBuilder};
 
 #[unsafe(no_mangle)]
@@ -33,7 +33,7 @@ pub fn hello(name: &str) -> String {
     format!("<green>Hello, <yellow>{name}</yellow>!")
 }
 
-fn handle_hello(api: &mut Api, sender: &CommandSender, args: &[String]) -> bool {
+fn handle_hello(api: &mut Api, sender: &CommandSenderInst, args: &[String]) -> bool {
     let name = match args.first() {
         Some(arg) => arg.clone(),
         None => match sender.name(api) {

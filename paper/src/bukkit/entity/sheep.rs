@@ -2,7 +2,7 @@ use jni::objects::{JObject, JValue};
 use jni::strings::JNIStr;
 use jni::{jni_sig, jni_str};
 
-use super::IsEntity;
+use super::Entity;
 use crate::api::Api;
 use crate::bukkit::DyeColor;
 
@@ -11,7 +11,7 @@ pub struct Sheep<'local> {
     obj: JObject<'local>,
 }
 
-impl<'local> IsEntity<'local> for Sheep<'local> {
+impl<'local> Entity<'local> for Sheep<'local> {
     const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/entity/Sheep");
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {

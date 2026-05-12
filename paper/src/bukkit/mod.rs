@@ -4,6 +4,6 @@ mod entity;
 pub mod event;
 pub(crate) mod mini_message;
 
-pub use command_sender::CommandSender;
+pub use command_sender::{CommandSender, CommandSenderInst};
 pub use dye_color::DyeColor;
-pub use entity::{Entity, IsEntity, Sheep};
+pub use entity::{Entity, EntityInst, Sheep};
