@@ -1,9 +1,10 @@
 use jni::sys::{JNIEnv, jobject};
+use paper::bukkit::dialog::{ActionButton, Dialog, DialogAction, DialogBase, DialogType};
 use paper::bukkit::event::{
     EntityDamageByEntityEvent, EntityDamageByEntityEventRef, PlayerInteractEntityEvent,
     PlayerInteractEntityEventRef,
 };
-use paper::bukkit::{CommandSender, CommandSenderInst, DyeColor, Sheep};
+use paper::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Key, Sheep};
 use paper::{Api, CoreApi, PluginBuilder};
 
 #[unsafe(no_mangle)]
@@ -34,9 +35,36 @@ fn handle_sheep_damaged<'l>(api: &mut Api<'_, 'l>, event: &EntityDamageByEntityE
             return;
         }
     };
-    if let Err(e) = player.send_message(api, "<yellow>BAAA?!") {
-        tracing::warn!("send_message failed: {e}");
+    let dialog = match build_baaa_dialog(api) {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("build_baaa_dialog failed: {e}");
+            return;
+        }
+    };
+    if let Err(e) = player.show_dialog(api, &dialog) {
+        tracing::warn!("show_dialog failed: {e}");
     }
+}
+
+fn build_baaa_dialog<'l>(api: &mut Api<'_, 'l>) -> jni::errors::Result<Dialog<'l>> {
+    let title = Component::mini_message(api, "<red>BAAAA?!</red>")?;
+    let base = DialogBase::builder(api, &title)?.build(api)?;
+
+    let key_quiet = Key::key(api, "disco", "sheep_baaa_quiet")?;
+    let key_loud = Key::key(api, "disco", "sheep_baaa_loud")?;
+
+    let label_quiet = Component::mini_message(api, "Baaa.")?;
+    let label_loud = Component::mini_message(api, "BAAA!")?;
+
+    let action_quiet = DialogAction::custom_click(api, &key_quiet)?;
+    let action_loud = DialogAction::custom_click(api, &key_loud)?;
+
+    let btn_quiet = ActionButton::create(api, &label_quiet, None, 150, Some(&action_quiet))?;
+    let btn_loud = ActionButton::create(api, &label_loud, None, 150, Some(&action_loud))?;
+
+    let dtype = DialogType::multi_action(api, &[btn_quiet, btn_loud])?;
+    Dialog::create(api, &base, &dtype)
 }
 
 fn handle_interact<'l>(api: &mut Api<'_, 'l>, event: &PlayerInteractEntityEventRef<'l>) {

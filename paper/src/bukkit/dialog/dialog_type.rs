@@ -75,20 +75,31 @@ impl<'local> DialogType<'local> {
     }
 
     /// `DialogType.multiAction(List<ActionButton>)` -- multiple buttons arranged in a grid.
+    ///
+    /// The 2-arg Java overload returns a `MultiActionType.Builder`; we call `.build()` on it
+    /// here to materialize a `MultiActionType` with default exit-action / columns.
     pub fn multi_action(
         api: &mut Api<'_, 'local>,
         actions: &[ActionButton<'local>],
     ) -> jni::errors::Result<Self> {
         let env = api.jni();
         let list = action_button_list(env, actions)?;
-        let obj = env
+        let builder = env
             .call_static_method(
                 TYPE_CLASS,
                 jni_str!("multiAction"),
                 jni_sig!(
-                    "(Ljava/util/List;)Lio/papermc/paper/registry/data/dialog/type/MultiActionType;"
+                    "(Ljava/util/List;)Lio/papermc/paper/registry/data/dialog/type/MultiActionType$Builder;"
                 ),
                 &[JValue::Object(&list)],
+            )?
+            .l()?;
+        let obj = env
+            .call_method(
+                &builder,
+                jni_str!("build"),
+                jni_sig!("()Lio/papermc/paper/registry/data/dialog/type/MultiActionType;"),
+                &[],
             )?
             .l()?;
         Ok(Self { obj })
