@@ -3,7 +3,7 @@ use jni::objects::JObject;
 use jni::strings::JNIStr;
 
 use super::Entity;
-use crate::bukkit::CommandSender;
+use crate::bukkit::{Audience, CommandSender};
 
 /// Wrapper for an `org.bukkit.entity.Player` JNI reference.
 ///
@@ -31,6 +31,12 @@ impl<'local> CommandSender<'local> for Player<'local> {
         Self { obj }
     }
 
+    fn as_jobject(&self) -> &JObject<'local> {
+        &self.obj
+    }
+}
+
+impl<'local> Audience<'local> for Player<'local> {
     fn as_jobject(&self) -> &JObject<'local> {
         &self.obj
     }
