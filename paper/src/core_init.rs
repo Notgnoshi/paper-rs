@@ -46,23 +46,36 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
 ///
 /// Builds a `PluginBuilder`, runs the user's `build` closure to register handlers, and returns the
 /// static `CoreApi` table the loader will dispatch through.
+///
+/// Returns a null pointer if the build closure returned `Err`. paper-loader maps a null return to a
+/// Java `RuntimeException`, aborting plugin init cleanly with the underlying exception surfaced via
+/// Bukkit's normal error path.
 pub fn core_init<F>(
     env: *mut jni::sys::JNIEnv,
     plugin: jni::sys::jobject,
     build: F,
 ) -> *const CoreApi
 where
-    F: FnOnce(&mut PluginBuilder<'_, '_>),
+    F: FnOnce(&mut PluginBuilder<'_, '_>) -> jni::errors::Result<()>,
 {
     let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let _ = unowned
+    let outcome = unowned
         .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
             logger::install_logger(env)?;
             let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
             let mut builder = PluginBuilder::new(env, &plugin_obj);
-            build(&mut builder);
-            Ok(())
+            build(&mut builder)
         })
         .into_outcome();
-    &CORE_API
+    match outcome {
+        jni::Outcome::Ok(_) => &CORE_API,
+        jni::Outcome::Err(e) => {
+            tracing::error!("paper_core_init failed: {e}");
+            std::ptr::null()
+        }
+        jni::Outcome::Panic(p) => {
+            tracing::error!("paper_core_init panicked: {p:?}");
+            std::ptr::null()
+        }
+    }
 }
