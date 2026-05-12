@@ -4,6 +4,7 @@ use jni_sys::{JNIEnv, jboolean, jlong, jobject, jobjectArray};
 mod api;
 mod builder;
 pub mod bukkit;
+pub(crate) mod callbacks;
 mod core_init;
 mod dispatch;
 mod logger;
@@ -17,7 +18,7 @@ pub use logger::{install_logger, shutdown_logger};
 /// ABI version of the `CoreApi` struct.
 ///
 /// Bump when adding fields. Loaders refuse to load plugins with a mismatched version.
-pub const CORE_ABI_VERSION: u32 = 1;
+pub const CORE_ABI_VERSION: u32 = 2;
 
 /// The function-pointer table that plugins hand back to `paper-loader` at init time.
 ///
@@ -42,4 +43,10 @@ pub struct CoreApi {
     /// Tab-completion. Returns a Java `List<String>` or null.
     pub dispatch_tab_complete:
         unsafe extern "C" fn(*mut JNIEnv, jlong, jobject, jobjectArray) -> jobject,
+    /// A Java functional-interface bridge (currently DialogActionCallback) was invoked; look up
+    /// the Rust closure by id and run it with the two object arguments.
+    pub dispatch_bi_consumer: unsafe extern "C" fn(*mut JNIEnv, jlong, jobject, jobject),
+    /// Java's Cleaner signalled that a bridge instance was GC'd; drop the Rust closure with the
+    /// given id from the callback registry.
+    pub drop_callback: unsafe extern "C" fn(jlong),
 }

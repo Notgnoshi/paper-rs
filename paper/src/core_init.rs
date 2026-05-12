@@ -5,7 +5,7 @@ use jni::{Env, EnvUnowned};
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
-use crate::{CORE_ABI_VERSION, CoreApi, dispatch, logger, registration};
+use crate::{CORE_ABI_VERSION, CoreApi, callbacks, dispatch, logger, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
 static CORE_API: CoreApi = CoreApi {
@@ -15,6 +15,8 @@ static CORE_API: CoreApi = CoreApi {
     dispatch_event: dispatch::dispatch_event,
     dispatch_command: dispatch::dispatch_command,
     dispatch_tab_complete: dispatch::dispatch_tab_complete,
+    dispatch_bi_consumer: callbacks::dispatch_bi_consumer,
+    drop_callback: callbacks::drop_callback,
 };
 
 unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
@@ -25,6 +27,7 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
             env.exception_clear();
         }
         dispatch::clear_handlers();
+        callbacks::clear();
         crate::bukkit::mini_message::shutdown();
         logger::shutdown_logger();
         Ok(())

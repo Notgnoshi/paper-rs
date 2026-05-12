@@ -1,10 +1,12 @@
 use jni::sys::{JNIEnv, jobject};
-use paper::bukkit::dialog::{ActionButton, Dialog, DialogAction, DialogBase, DialogType};
+use paper::bukkit::dialog::{
+    ActionButton, ClickCallbackOptions, Dialog, DialogAction, DialogBase, DialogType,
+};
 use paper::bukkit::event::{
     EntityDamageByEntityEvent, EntityDamageByEntityEventRef, PlayerInteractEntityEvent,
     PlayerInteractEntityEventRef,
 };
-use paper::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Key, Sheep};
+use paper::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Sheep};
 use paper::{Api, CoreApi, PluginBuilder};
 
 #[unsafe(no_mangle)]
@@ -52,14 +54,23 @@ fn build_baaa_dialog<'l>(api: &mut Api<'_, 'l>) -> jni::errors::Result<Dialog<'l
     let title = Component::mini_message(api, "<red>BAAAA?!</red>")?;
     let base = DialogBase::builder(api, &title)?.build(api)?;
 
-    let key_quiet = Key::key(api, "disco", "sheep_baaa_quiet")?;
-    let key_loud = Key::key(api, "disco", "sheep_baaa_loud")?;
+    let options = ClickCallbackOptions::builder(api)?
+        .uses(api, 1)?
+        .build(api)?;
 
     let label_quiet = Component::mini_message(api, "Baaa.")?;
     let label_loud = Component::mini_message(api, "BAAA!")?;
 
-    let action_quiet = DialogAction::custom_click(api, &key_quiet)?;
-    let action_loud = DialogAction::custom_click(api, &key_loud)?;
+    let action_quiet = DialogAction::custom_click_callback(api, &options, |_api, _view, _aud| {
+        tracing::info!("sheep said: Baaa.");
+    })?;
+    let options_loud = ClickCallbackOptions::builder(api)?
+        .uses(api, 1)?
+        .build(api)?;
+    let action_loud =
+        DialogAction::custom_click_callback(api, &options_loud, |_api, _view, _aud| {
+            tracing::info!("sheep said: BAAA!");
+        })?;
 
     let btn_quiet = ActionButton::create(api, &label_quiet, None, 150, Some(&action_quiet))?;
     let btn_loud = ActionButton::create(api, &label_loud, None, 150, Some(&action_loud))?;

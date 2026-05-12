@@ -166,3 +166,28 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchTabComplete<'local>(
     let raw_env = EnvUnowned::into_raw(unowned);
     unsafe { ((*api).dispatch_tab_complete)(raw_env, handler_id, sender, args) }
 }
+
+/// Bridge for `RustDialogActionCallback.bridgeDispatch(long id, Object t, Object u)`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_RustDialogActionCallback_bridgeDispatch<'local>(
+    unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    id: jlong,
+    t: jobject,
+    u: jobject,
+) {
+    let Some(api) = current_api() else { return };
+    let raw_env = EnvUnowned::into_raw(unowned);
+    unsafe { ((*api).dispatch_bi_consumer)(raw_env, id, t, u) };
+}
+
+/// Bridge for `RustDialogActionCallback.bridgeDrop(long id)`, called from Cleaner.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_paperrs_shim_RustDialogActionCallback_bridgeDrop<'local>(
+    _unowned: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    id: jlong,
+) {
+    let Some(api) = current_api() else { return };
+    unsafe { ((*api).drop_callback)(id) };
+}
