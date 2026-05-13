@@ -75,11 +75,16 @@ fn read_string_array(
     arr: &JObjectArray<'_, JString>,
 ) -> jni::errors::Result<Vec<String>> {
     let len = arr.len(env)?;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        let elem = arr.get_element(env, i)?;
-        let s = elem.try_to_string(env)?;
-        out.push(s);
-    }
-    Ok(out)
+    // Each `get_element` allocates a local JNI ref. JNI guarantees only 16 locals by default, so a
+    // long argument list overflows the outer frame's allotment. Push a sized sub-frame so those
+    // intermediates are released en masse when this helper returns
+    env.with_local_frame(len + 4, |env| -> jni::errors::Result<Vec<String>> {
+        let mut out = Vec::with_capacity(len);
+        for i in 0..len {
+            let elem = arr.get_element(env, i)?;
+            let s = elem.try_to_string(env)?;
+            out.push(s);
+        }
+        Ok(out)
+    })
 }
