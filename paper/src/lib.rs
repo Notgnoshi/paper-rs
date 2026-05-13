@@ -9,13 +9,11 @@ mod core_init;
 pub(crate) mod ctx;
 mod dispatch;
 pub(crate) mod ffi;
-mod logger;
 mod registration;
 
 pub use api::Api;
 pub use builder::PluginBuilder;
 pub use core_init::core_init;
-pub use logger::{install_logger, shutdown_logger};
 
 /// ABI version of the `CoreApi` struct.
 ///

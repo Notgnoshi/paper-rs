@@ -1,4 +1,15 @@
-use std::sync::Mutex;
+//! Bridges Rust `tracing` events into the JVM's Java logger via a static dispatcher class.
+//!
+//! The subscriber lives here in paper-loader rather than in a core plugin because paper-loader's
+//! .so is never unloaded; a subscriber whose `JniLayer` code lives in a `dlclose`-able .so would
+//! become unmapped on `/reload` and crash on the next tracing event. Keeping it here makes the
+//! subscriber a one-time, process-lifetime install.
+//!
+//! The dispatcher class (`io.paperrs.shim.PaperFfiLogger`) must expose a static
+//! `dispatch(int level, String target, String message)` method. Level mapping: 0=ERROR, 1=WARN,
+//! 2=INFO, 3=DEBUG, 4=TRACE. Filtering is controlled by `RUST_LOG` (default: `info`).
+
+use std::sync::{Mutex, Once};
 
 use jni::objects::{JClass, JValue};
 use jni::refs::Global;
@@ -7,40 +18,48 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
+/// Cached `JavaVM` handle. The JVM is the same instance across `/reload`, so we fetch it once
+/// and keep it.
 static JVM: Mutex<Option<JavaVM>> = Mutex::new(None);
+
+/// Global ref to the dispatcher class. Refreshed on every `install` so the cached `Global`
+/// doesn't pin a stale `ClassLoader` from a previous load.
 static DISPATCHER_CLASS: Mutex<Option<Global<JClass<'static>>>> = Mutex::new(None);
 
-/// Install a tracing subscriber that routes events to the Java logger via JNI.
+/// Tracks the one-shot subscriber installation. `tracing` only honors a single global default,
+/// and `try_init` after the first call is a silent no-op; using `Once` makes the contract
+/// explicit and avoids rebuilding the filter on every plugin load.
+static SUBSCRIBER_INIT: Once = Once::new();
+
+/// Install (or refresh) the JNI logger bridge.
 ///
-/// The dispatcher class must expose a static `dispatch(int level, String target, String message)`
-/// method. Filtering is controlled by RUST_LOG (default: info).
-pub fn install_logger(env: &mut Env) -> jni::errors::Result<()> {
+/// First call: caches the JVM, acquires a `Global<JClass>` for the dispatcher, and installs the
+/// process-global tracing subscriber. Subsequent calls (on each `/reload`) replace the dispatcher
+/// `Global` with a fresh one — the previous one's `Drop` releases its pin on the prior
+/// `ClassLoader`, so it can be GC'd along with the unloaded plugin.
+///
+/// Returns `Err` if any JNI lookup fails; the caller may treat this as best-effort and continue
+/// (tracing events just no-op until a subsequent install succeeds).
+pub(crate) fn install(env: &mut Env) -> jni::errors::Result<()> {
     {
-        let jvm_lock = JVM.lock().unwrap();
-        if jvm_lock.is_some() {
-            return Ok(());
+        let mut jvm = JVM.lock().unwrap();
+        if jvm.is_none() {
+            *jvm = Some(env.get_java_vm()?);
         }
     }
-    let vm = env.get_java_vm()?;
     let class = env.find_class(jni_str!("io/paperrs/shim/PaperFfiLogger"))?;
     let class_global = env.new_global_ref(class)?;
-    *JVM.lock().unwrap() = Some(vm);
     *DISPATCHER_CLASS.lock().unwrap() = Some(class_global);
-    install_subscriber();
+
+    SUBSCRIBER_INIT.call_once(install_subscriber);
     Ok(())
 }
 
-/// Tear down the JNI logger bridge
-///
-/// Drops the cached `Global<JClass>` reference (which calls `DeleteGlobalRef`, releasing the
-/// JVM-side pin on the class) and clears the cached `JavaVM` handle. Subsequent tracing events
-/// become no-ops until `install_logger` is called again on the next plugin enable.
-///
-/// Must be called BEFORE the core .so is dlclose'd; after dlclose the `Global` drop code (in core's
-/// `paper` rlib copy) would be unmapped.
-pub fn shutdown_logger() {
+/// Drop the cached dispatcher-class `Global` so its `ClassLoader` can be GC'd on `/reload`.
+/// The cached `JavaVM` and the installed subscriber stay live for the process lifetime; tracing
+/// events between `shutdown` and the next `install` are silently dropped.
+pub(crate) fn shutdown() {
     *DISPATCHER_CLASS.lock().unwrap() = None;
-    *JVM.lock().unwrap() = None;
 }
 
 fn install_subscriber() {

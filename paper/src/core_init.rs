@@ -5,7 +5,7 @@ use jni::objects::JObject;
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
-use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, ffi, logger, registration};
+use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, ffi, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
 static CORE_API: CoreApi = CoreApi {
@@ -29,7 +29,6 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
             warn!("unregister_all_listeners failed: {e}");
             env.exception_clear();
         }
-        logger::shutdown_logger();
         // Drops any static state initialized during plugin runtime along with any captured JNI globals.
         ctx::uninstall();
         Ok(())
@@ -68,7 +67,6 @@ where
         if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
             eyre::bail!("paper_core_init: Ctx already initialized (prior shutdown missing)");
         }
-        logger::install_logger(env)?;
         let mut builder = PluginBuilder::new(env);
         build(&mut builder)?;
         Ok(())

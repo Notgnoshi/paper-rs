@@ -14,6 +14,8 @@ use jni::{Env, EnvUnowned};
 use libloading::{Library, Symbol};
 use paper::{CORE_ABI_VERSION, CoreApi};
 
+mod logger;
+
 /// A loaded core plugin: the `dlopen`-managed library and the function-pointer table it exported
 /// at `paper_core_init` time.
 struct LoadedCore {
@@ -91,26 +93,34 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_init<'local>(
     core_path: JString<'local>,
     plugin: JObject<'local>,
 ) {
-    eprintln!("paper-loader: init entered");
     unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
+            // Wire the tracing subscriber up first; any tracing below this point reaches Java.
+            // Earlier events (before this line) would land in /dev/null since the subscriber
+            // isn't installed yet, so there's nothing to log here.
+            if let Err(e) = logger::install(env) {
+                eprintln!("paper-loader: logger install failed: {e}");
+            }
+            tracing::debug!("paper-loader: init entered");
             let path = core_path.try_to_string(env)?;
             // Atomically take ownership of any stale core. Dispatch threads hitting the
             // swap-to-None window still hold guards on the old Arc, so its `Library` won't
             // dlclose until they drop.
             let stale = CORE.swap(None);
             if let Some(core) = stale.as_ref() {
-                eprintln!("paper-loader: stale CoreApi present; running shutdown before re-load");
+                tracing::warn!(
+                    "paper-loader: stale CoreApi present; running shutdown before re-load"
+                );
                 let _ = unsafe { ((*core.api).shutdown)(env.get_raw()) };
                 drop(stale);
             }
-            eprintln!("paper-loader: dlopen({path})");
+            tracing::debug!("paper-loader: dlopen({path})");
             let _api_ptr = load_core(&path, env.get_raw(), plugin.as_raw()).map_err(|msg| {
-                eprintln!("paper-loader: load_core failed: {msg}");
+                tracing::error!("paper-loader: load_core failed: {msg}");
                 let _ = env.throw(msg);
                 Error::JavaException
             })?;
-            eprintln!("paper-loader: init complete");
+            tracing::info!("paper-loader: {path} init complete");
             Ok(())
         })
         .resolve::<ThrowRuntimeExAndDefault>()
@@ -121,20 +131,23 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_shutdown<'local>(
     mut unowned: EnvUnowned<'local>,
     _class: JClass<'local>,
 ) {
-    eprintln!("paper-loader: shutdown entered");
+    tracing::info!("paper-loader: shutdown entered");
     let _ = unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
             let guard = CORE.load();
             if let Some(core) = guard.as_ref() {
-                eprintln!("paper-loader: calling core shutdown");
+                tracing::info!("paper-loader: calling core shutdown");
                 let _ = unsafe { ((*core.api).shutdown)(env.get_raw()) };
                 drop(guard);
-                eprintln!("paper-loader: dropping core library (dlclose)");
+                tracing::debug!("paper-loader: dropping core library (dlclose may be deferred)");
                 unload_core();
-                eprintln!("paper-loader: unload complete");
+                tracing::debug!("paper-loader: unload complete");
             } else {
-                eprintln!("paper-loader: no CoreApi to shutdown");
+                tracing::warn!("paper-loader: no CoreApi to shutdown");
             }
+            // Drop the dispatcher class Global so the unloading plugin's ClassLoader can be GC'd.
+            // Tracing events between here and the next install will no-op silently.
+            logger::shutdown();
             Ok(())
         })
         .into_outcome();
