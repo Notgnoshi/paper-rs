@@ -20,7 +20,7 @@ impl<'local> Entity<'local> for Sheep<'local> {
 }
 
 impl<'local> Sheep<'local> {
-    pub fn set_color(&mut self, api: &mut Api, color: DyeColor) -> jni::errors::Result<()> {
+    pub fn set_color(&mut self, api: &mut Api, color: DyeColor) -> eyre::Result<()> {
         let env = api.jni();
         let dye = color.as_java(env)?;
         env.call_method(

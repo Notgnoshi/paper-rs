@@ -45,7 +45,7 @@ impl<'local> PlayerInteractEntityEventRef<'local> {
     pub fn right_clicked(
         &self,
         api: &mut Api<'_, 'local>,
-    ) -> jni::errors::Result<EntityInst<'local>> {
+    ) -> eyre::Result<EntityInst<'local>> {
         let env = api.jni();
         let entity = env
             .call_method(

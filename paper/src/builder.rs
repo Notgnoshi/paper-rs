@@ -47,7 +47,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
     pub fn on<E: Event>(
         &mut self,
         handler: impl for<'b, 'l> Fn(&mut Api<'b, 'l>, &E::Wrapper<'l>) + Send + Sync + 'static,
-    ) -> jni::errors::Result<()> {
+    ) -> eyre::Result<()> {
         let id = ctx::with_ctx(|c| {
             let id = c.next_handler_id();
             c.event_handlers.insert(
@@ -78,7 +78,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             id
         })
         .expect("Ctx installed during core_init");
-        registration::subscribe_event(self.env, E::CLASS_NAME, id)
+        Ok(registration::subscribe_event(self.env, E::CLASS_NAME, id)?)
     }
 
     /// Register a Bukkit command handler under `name`.
@@ -94,7 +94,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
         + Send
         + Sync
         + 'static,
-    ) -> jni::errors::Result<()> {
+    ) -> eyre::Result<()> {
         let id = ctx::with_ctx(|c| {
             let id = c.next_handler_id();
             c.command_handlers.insert(
@@ -115,6 +115,6 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             id
         })
         .expect("Ctx installed during core_init");
-        registration::register_command(self.env, name, id)
+        Ok(registration::register_command(self.env, name, id)?)
     }
 }

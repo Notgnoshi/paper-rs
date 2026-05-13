@@ -5,8 +5,7 @@ use jni::objects::JObject;
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
-use crate::ffi;
-use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, logger, registration};
+use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, ffi, logger, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
 static CORE_API: CoreApi = CoreApi {
@@ -49,13 +48,19 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
 /// Returns a null pointer if the build closure returned `Err`. paper-loader maps a null return to a
 /// Java `RuntimeException`, aborting plugin init cleanly with the underlying exception surfaced via
 /// Bukkit's normal error path.
+//
+// `core_init` is invoked from a plugin's C-ABI `paper_core_init` symbol with raw pointers handed
+// to it by the JVM. JNI's calling convention is the contract for those pointers being valid; null
+// is null-checked inside [`ffi::bridge`]. Keeping this function safe at the Rust level lets plugin
+// authors write `paper::core_init(env, plugin, ...)` without an unsafe wrapper at every call site.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn core_init<F>(
     env: *mut jni::sys::JNIEnv,
     plugin: jni::sys::jobject,
     build: F,
 ) -> *const CoreApi
 where
-    F: FnOnce(&mut PluginBuilder<'_, '_>) -> jni::errors::Result<()>,
+    F: FnOnce(&mut PluginBuilder<'_, '_>) -> eyre::Result<()>,
 {
     let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
         let plugin_obj = unsafe { JObject::from_raw(env, plugin) };

@@ -26,7 +26,7 @@ impl<'local> ActionButton<'local> {
         tooltip: Option<&Component<'local>>,
         width: i32,
         action: Option<&DialogAction<'local>>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let null = JObject::null();
         let tooltip_obj: &JObject<'_> = tooltip.map(|c| &c.obj).unwrap_or(&null);

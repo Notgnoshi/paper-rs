@@ -15,7 +15,7 @@ impl<'local> Component<'local> {
     /// Parse the given MiniMessage string into a Component.
     ///
     /// See <https://docs.advntr.dev/minimessage/index.html> for tag syntax.
-    pub fn mini_message(api: &mut Api<'_, 'local>, text: &str) -> jni::errors::Result<Self> {
+    pub fn mini_message(api: &mut Api<'_, 'local>, text: &str) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = super::mini_message::deserialize(env, text)?;
         Ok(Self { obj })

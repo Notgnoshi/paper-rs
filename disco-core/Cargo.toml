@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+eyre.workspace = true
 jni.workspace = true
 paper.workspace = true
 tracing.workspace = true

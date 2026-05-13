@@ -6,8 +6,7 @@ use jni::sys::{JNIEnv, jlong, jobject};
 use tracing::warn;
 
 use crate::api::Api;
-use crate::ctx;
-use crate::ffi;
+use crate::{ctx, ffi};
 
 /// A Rust closure backing a two-argument Java functional interface (e.g.,
 /// `DialogActionCallback.accept(DialogResponseView, Audience)`).

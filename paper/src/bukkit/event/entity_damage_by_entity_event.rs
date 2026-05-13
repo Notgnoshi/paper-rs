@@ -41,7 +41,7 @@ impl Event for EntityDamageByEntityEvent {
 
 impl<'local> EntityDamageByEntityEventRef<'local> {
     /// The entity being damaged.
-    pub fn entity(&self, api: &mut Api<'_, 'local>) -> jni::errors::Result<EntityInst<'local>> {
+    pub fn entity(&self, api: &mut Api<'_, 'local>) -> eyre::Result<EntityInst<'local>> {
         let env = api.jni();
         let entity = env
             .call_method(
@@ -58,7 +58,7 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
     ///
     /// For projectile damage this is the projectile itself (e.g., an arrow); to find the
     /// player who ultimately caused the damage, use [`player_attacker`](Self::player_attacker).
-    pub fn damager(&self, api: &mut Api<'_, 'local>) -> jni::errors::Result<EntityInst<'local>> {
+    pub fn damager(&self, api: &mut Api<'_, 'local>) -> eyre::Result<EntityInst<'local>> {
         let env = api.jni();
         let entity = env
             .call_method(
@@ -80,7 +80,7 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
     pub fn player_attacker(
         &self,
         api: &mut Api<'_, 'local>,
-    ) -> jni::errors::Result<Option<Player<'local>>> {
+    ) -> eyre::Result<Option<Player<'local>>> {
         let damager = self.damager(api)?;
         let env = api.jni();
         let player_class = env.find_class(jni_str!("org/bukkit/entity/Player"))?;

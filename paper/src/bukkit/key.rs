@@ -12,11 +12,7 @@ pub struct Key<'local> {
 impl<'local> Key<'local> {
     /// Construct a Key from a namespace and value, e.g. `Key::key(api, "disco", "sheep_baaa")`
     /// for `disco:sheep_baaa`.
-    pub fn key(
-        api: &mut Api<'_, 'local>,
-        namespace: &str,
-        value: &str,
-    ) -> jni::errors::Result<Self> {
+    pub fn key(api: &mut Api<'_, 'local>, namespace: &str, value: &str) -> eyre::Result<Self> {
         let env = api.jni();
         let ns = env.new_string(namespace)?;
         let val = env.new_string(value)?;

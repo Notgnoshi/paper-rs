@@ -13,9 +13,7 @@ pub struct ClickCallbackOptions<'local> {
 
 impl<'local> ClickCallbackOptions<'local> {
     /// `ClickCallback.Options.builder()`.
-    pub fn builder(
-        api: &mut Api<'_, 'local>,
-    ) -> jni::errors::Result<ClickCallbackOptionsBuilder<'local>> {
+    pub fn builder(api: &mut Api<'_, 'local>) -> eyre::Result<ClickCallbackOptionsBuilder<'local>> {
         let env = api.jni();
         let obj = env
             .call_static_method(
@@ -37,7 +35,7 @@ pub struct ClickCallbackOptionsBuilder<'local> {
 
 impl<'local> ClickCallbackOptionsBuilder<'local> {
     /// `Builder.uses(int)`.
-    pub fn uses(self, api: &mut Api<'_, 'local>, count: i32) -> jni::errors::Result<Self> {
+    pub fn uses(self, api: &mut Api<'_, 'local>, count: i32) -> eyre::Result<Self> {
         let env = api.jni();
         env.call_method(
             &self.obj,
@@ -50,11 +48,7 @@ impl<'local> ClickCallbackOptionsBuilder<'local> {
 
     /// `Builder.lifetime(TemporalAmount)`. Converts the Rust Duration to a Java `Duration`,
     /// which `implements TemporalAmount`.
-    pub fn lifetime(
-        self,
-        api: &mut Api<'_, 'local>,
-        duration: Duration,
-    ) -> jni::errors::Result<Self> {
+    pub fn lifetime(self, api: &mut Api<'_, 'local>, duration: Duration) -> eyre::Result<Self> {
         let env = api.jni();
         let java_duration = env
             .call_static_method(
@@ -76,10 +70,7 @@ impl<'local> ClickCallbackOptionsBuilder<'local> {
     }
 
     /// `Builder.build()`.
-    pub fn build(
-        self,
-        api: &mut Api<'_, 'local>,
-    ) -> jni::errors::Result<ClickCallbackOptions<'local>> {
+    pub fn build(self, api: &mut Api<'_, 'local>) -> eyre::Result<ClickCallbackOptions<'local>> {
         let env = api.jni();
         let obj = env
             .call_method(

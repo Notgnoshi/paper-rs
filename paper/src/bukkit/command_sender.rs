@@ -80,7 +80,7 @@ pub trait CommandSender<'local>: Sized {
 
     fn as_jobject(&self) -> &JObject<'local>;
 
-    fn name(&self, api: &mut Api) -> jni::errors::Result<String> {
+    fn name(&self, api: &mut Api) -> eyre::Result<String> {
         let env = api.jni();
         let name_obj = env
             .call_method(
@@ -91,7 +91,7 @@ pub trait CommandSender<'local>: Sized {
             )?
             .l()?;
         let name_jstr = env.cast_local::<JString>(name_obj)?;
-        name_jstr.try_to_string(env)
+        Ok(name_jstr.try_to_string(env)?)
     }
 
     /// Send a styled message.
@@ -102,7 +102,7 @@ pub trait CommandSender<'local>: Sized {
     ///
     /// To bypass MiniMessage parsing (e.g., for user-controlled content where `<` shouldn't be
     /// interpreted as a tag), use [send_plain](Self::send_plain)
-    fn send_message(&self, api: &mut Api, msg: impl AsRef<str>) -> jni::errors::Result<()> {
+    fn send_message(&self, api: &mut Api, msg: impl AsRef<str>) -> eyre::Result<()> {
         let env = api.jni();
         let component = super::mini_message::deserialize(env, msg.as_ref())?;
         env.call_method(
@@ -117,7 +117,7 @@ pub trait CommandSender<'local>: Sized {
     /// Send a literal text message with no MiniMessage parsing or styling.
     ///
     /// Use for user-controlled content or anywhere `<` characters should be preserved as-is.
-    fn send_plain(&self, api: &mut Api, msg: impl AsRef<str>) -> jni::errors::Result<()> {
+    fn send_plain(&self, api: &mut Api, msg: impl AsRef<str>) -> eyre::Result<()> {
         let env = api.jni();
         let jstr = env.new_string(msg.as_ref())?;
         let component = env

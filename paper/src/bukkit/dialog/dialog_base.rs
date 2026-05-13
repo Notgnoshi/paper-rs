@@ -18,7 +18,7 @@ impl<'local> DialogBase<'local> {
     pub fn builder(
         api: &mut Api<'_, 'local>,
         title: &Component<'local>,
-    ) -> jni::errors::Result<DialogBaseBuilder<'local>> {
+    ) -> eyre::Result<DialogBaseBuilder<'local>> {
         let env = api.jni();
         let builder_obj = env
             .call_static_method(
@@ -49,7 +49,7 @@ impl<'local> DialogBaseBuilder<'local> {
         self,
         api: &mut Api<'_, 'local>,
         title: Option<&Component<'local>>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let null = JObject::null();
         let title_obj: &JObject<'_> = title.map(|c| &c.obj).unwrap_or(&null);
@@ -69,7 +69,7 @@ impl<'local> DialogBaseBuilder<'local> {
         self,
         api: &mut Api<'_, 'local>,
         value: bool,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         env.call_method(
             &self.obj,
@@ -81,7 +81,7 @@ impl<'local> DialogBaseBuilder<'local> {
     }
 
     /// `Builder.pause(boolean)`.
-    pub fn pause(self, api: &mut Api<'_, 'local>, value: bool) -> jni::errors::Result<Self> {
+    pub fn pause(self, api: &mut Api<'_, 'local>, value: bool) -> eyre::Result<Self> {
         let env = api.jni();
         env.call_method(
             &self.obj,
@@ -97,7 +97,7 @@ impl<'local> DialogBaseBuilder<'local> {
         self,
         api: &mut Api<'_, 'local>,
         action: DialogAfterAction,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let action_obj = action.as_java(env)?;
         env.call_method(
@@ -116,7 +116,7 @@ impl<'local> DialogBaseBuilder<'local> {
         self,
         api: &mut Api<'_, 'local>,
         body: &[DialogBody<'local>],
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let list = dialog_body_list(env, body)?;
         env.call_method(
@@ -131,7 +131,7 @@ impl<'local> DialogBaseBuilder<'local> {
     }
 
     /// `Builder.build()` -- finalize and return the DialogBase.
-    pub fn build(self, api: &mut Api<'_, 'local>) -> jni::errors::Result<DialogBase<'local>> {
+    pub fn build(self, api: &mut Api<'_, 'local>) -> eyre::Result<DialogBase<'local>> {
         let env = api.jni();
         let obj = env
             .call_method(
@@ -148,7 +148,7 @@ impl<'local> DialogBaseBuilder<'local> {
 fn dialog_body_list<'local>(
     env: &mut Env<'local>,
     body: &[DialogBody<'local>],
-) -> jni::errors::Result<JObject<'local>> {
+) -> eyre::Result<JObject<'local>> {
     let list = env.new_object(
         jni_str!("java/util/ArrayList"),
         jni_sig!("(I)V"),

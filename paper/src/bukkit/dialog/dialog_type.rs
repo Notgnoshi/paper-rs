@@ -22,7 +22,7 @@ const TYPE_CLASS: &jni::strings::JNIStr =
 
 impl<'local> DialogType<'local> {
     /// `DialogType.notice()` -- a single "OK"-style notice with the default acknowledge button.
-    pub fn notice(api: &mut Api<'_, 'local>) -> jni::errors::Result<Self> {
+    pub fn notice(api: &mut Api<'_, 'local>) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(
@@ -39,7 +39,7 @@ impl<'local> DialogType<'local> {
     pub fn notice_with(
         api: &mut Api<'_, 'local>,
         action: &ActionButton<'local>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(
@@ -59,7 +59,7 @@ impl<'local> DialogType<'local> {
         api: &mut Api<'_, 'local>,
         yes: &ActionButton<'local>,
         no: &ActionButton<'local>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(
@@ -81,7 +81,7 @@ impl<'local> DialogType<'local> {
     pub fn multi_action(
         api: &mut Api<'_, 'local>,
         actions: &[ActionButton<'local>],
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let list = action_button_list(env, actions)?;
         let builder = env
@@ -110,7 +110,7 @@ impl<'local> DialogType<'local> {
 pub(crate) fn action_button_list<'local>(
     env: &mut jni::Env<'local>,
     actions: &[ActionButton<'local>],
-) -> jni::errors::Result<JObject<'local>> {
+) -> eyre::Result<JObject<'local>> {
     let list = env.new_object(
         jni_str!("java/util/ArrayList"),
         jni_sig!("(I)V"),

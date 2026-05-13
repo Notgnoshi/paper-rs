@@ -24,7 +24,7 @@ impl<'local> Dialog<'local> {
         api: &mut Api<'_, 'local>,
         base: &DialogBase<'local>,
         type_: &DialogType<'local>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(

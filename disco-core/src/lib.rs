@@ -50,7 +50,7 @@ fn handle_sheep_damaged<'l>(api: &mut Api<'_, 'l>, event: &EntityDamageByEntityE
     }
 }
 
-fn build_baaa_dialog<'l>(api: &mut Api<'_, 'l>) -> jni::errors::Result<Dialog<'l>> {
+fn build_baaa_dialog<'l>(api: &mut Api<'_, 'l>) -> eyre::Result<Dialog<'l>> {
     let title = Component::mini_message(api, "<red>BAAAA?!</red>")?;
     let base = DialogBase::builder(api, &title)?.build(api)?;
 

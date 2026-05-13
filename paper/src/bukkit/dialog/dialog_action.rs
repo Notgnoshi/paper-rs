@@ -20,7 +20,7 @@ impl<'local> DialogAction<'local> {
     /// (typically via `PlayerCustomClickEvent`).
     ///
     /// Mirrors `DialogAction.customClick(Key, @Nullable BinaryTagHolder)`.
-    pub fn custom_click(api: &mut Api<'_, 'local>, key: &Key<'local>) -> jni::errors::Result<Self> {
+    pub fn custom_click(api: &mut Api<'_, 'local>, key: &Key<'local>) -> eyre::Result<Self> {
         let env = api.jni();
         let null_obj = JObject::null();
         let obj = env
@@ -50,7 +50,7 @@ impl<'local> DialogAction<'local> {
         api: &mut Api<'_, 'local>,
         options: &ClickCallbackOptions<'local>,
         callback: F,
-    ) -> jni::errors::Result<Self>
+    ) -> eyre::Result<Self>
     where
         F: for<'a> Fn(&mut Api<'_, 'a>, &JObject<'a>, &JObject<'a>) + Send + Sync + 'static,
     {

@@ -17,11 +17,7 @@ pub trait Audience<'local> {
     /// Show a dialog to this audience.
     ///
     /// The Java signature is `Audience.showDialog(DialogLike)`; `Dialog` extends `DialogLike`.
-    fn show_dialog(
-        &self,
-        api: &mut Api<'_, 'local>,
-        dialog: &Dialog<'local>,
-    ) -> jni::errors::Result<()> {
+    fn show_dialog(&self, api: &mut Api<'_, 'local>, dialog: &Dialog<'local>) -> eyre::Result<()> {
         let env = api.jni();
         env.call_method(
             self.as_jobject(),

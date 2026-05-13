@@ -21,7 +21,7 @@ impl<'local> DialogBody<'local> {
     pub fn plain_message(
         api: &mut Api<'_, 'local>,
         text: &Component<'local>,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(
@@ -43,7 +43,7 @@ impl<'local> DialogBody<'local> {
         api: &mut Api<'_, 'local>,
         text: &Component<'local>,
         width: i32,
-    ) -> jni::errors::Result<Self> {
+    ) -> eyre::Result<Self> {
         let env = api.jni();
         let obj = env
             .call_static_method(
