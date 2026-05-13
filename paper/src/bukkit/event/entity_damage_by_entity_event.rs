@@ -1,5 +1,4 @@
 use jni::objects::JObject;
-use jni::strings::JNIStr;
 use jni::{jni_sig, jni_str};
 
 use super::Event;
@@ -21,8 +20,7 @@ unsafe impl<'local> JObjectRepr<'local> for EntityDamageByEntityEventRef<'local>
 
 impl Event for EntityDamageByEntityEvent {
     type Wrapper<'local> = EntityDamageByEntityEventRef<'local>;
-    const CLASS_NAME: &'static JNIStr =
-        jni_str!("org/bukkit/event/entity/EntityDamageByEntityEvent");
+    const CLASS_NAME: &'static str = "org/bukkit/event/entity/EntityDamageByEntityEvent";
 }
 
 impl<'local> EntityDamageByEntityEventRef<'local> {
@@ -68,8 +66,8 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         api: &mut Api<'_, 'local>,
     ) -> eyre::Result<Option<Player<'local>>> {
         let damager = self.damager(api)?;
+        let player_class = api.class("org/bukkit/entity/Player")?;
         let env = api.jni();
-        let player_class = env.find_class(jni_str!("org/bukkit/entity/Player"))?;
 
         // Direct player damage: punch, sword, etc.
         if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &player_class)? {
@@ -78,7 +76,8 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         }
 
         // Projectile damage: arrow, thrown potion, trident, etc. Check the shooter.
-        let projectile_class = env.find_class(jni_str!("org/bukkit/entity/Projectile"))?;
+        let projectile_class = api.class("org/bukkit/entity/Projectile")?;
+        let env = api.jni();
         if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &projectile_class)? {
             let shooter_obj = env
                 .call_method(

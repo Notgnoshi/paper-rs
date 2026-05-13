@@ -1,5 +1,4 @@
 use jni::objects::{JObject, JValue};
-use jni::strings::JNIStr;
 use jni::{jni_sig, jni_str};
 
 use super::Entity;
@@ -12,7 +11,7 @@ pub struct Sheep<'local> {
 }
 
 impl<'local> Entity<'local> for Sheep<'local> {
-    const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/entity/Sheep");
+    const CLASS_NAME: &'static str = "org/bukkit/entity/Sheep";
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {
         Self { obj }

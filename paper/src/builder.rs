@@ -62,8 +62,8 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
                         // the parent class's list, so fires of sibling/parent events get routed
                         // here.
                         tracing::debug!(
-                            "event skipped: expected {:?}, actual {}",
-                            E::CLASS_NAME.as_cstr(),
+                            "event skipped: expected {}, actual {}",
+                            E::CLASS_NAME,
                             actual_class_name(env, obj),
                         );
                     }

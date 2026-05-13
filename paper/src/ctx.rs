@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::sync::Mutex;
 
-use jni::objects::JObject;
+use jni::Env;
+use jni::objects::{JClass, JObject};
 use jni::refs::Global;
+use jni::strings::JNIStr;
 
 use crate::callbacks::BiConsumerFn;
 use crate::dispatch::{CommandHandler, EventHandler};
@@ -30,6 +33,10 @@ pub(crate) struct Ctx {
     /// Cached `MiniMessage` singleton. Lazy-initialized on first use, since not every plugin
     /// touches MiniMessage.
     pub(crate) mini_message: Option<Global<JObject<'static>>>,
+    /// Cache of resolved JNI class globals, keyed by the same `&'static str` JNI class name
+    /// that drove the lookup. Populated lazily on first miss in `cached_class`. Cleared along
+    /// with the rest of `Ctx` on shutdown, releasing each `DeleteGlobalRef`.
+    jni_cache: HashMap<&'static str, Global<JClass<'static>>>,
     next_handler_id: i64,
     next_callback_id: i64,
 }
@@ -43,6 +50,7 @@ impl Ctx {
             command_handlers: HashMap::new(),
             callbacks: HashMap::new(),
             mini_message: None,
+            jni_cache: HashMap::new(),
             next_handler_id: 1,
             next_callback_id: 1,
         }
@@ -98,4 +106,40 @@ pub(crate) fn uninstall() {
 pub(crate) fn with_ctx<R>(body: impl FnOnce(&mut Ctx) -> R) -> Option<R> {
     let mut guard = CTX.lock().unwrap();
     guard.as_mut().map(body)
+}
+
+/// Look up `name` in the Ctx-resident class cache, populating it on miss.
+///
+/// Returns a fresh `JClass<'local>` local ref derived from the cached global; the caller can use
+/// it for the duration of the current JNI frame. The global stays in the cache for the lifetime
+/// of the plugin load, so subsequent lookups for the same name skip the `FindClass` call entirely.
+///
+/// Names must be valid JVM class descriptors (e.g. `org/bukkit/entity/Player`). Invalid input
+/// (interior NUL or non-modified-UTF-8) panics, since every call site passes a compile-time
+/// literal -- bad input would be a build-time bug to fix.
+pub(crate) fn cached_class<'local>(
+    env: &mut Env<'local>,
+    name: &'static str,
+) -> jni::errors::Result<JClass<'local>> {
+    // Cache hit: derive a fresh local from the cached global under the lock, return it.
+    let hit = with_ctx(|c| -> jni::errors::Result<Option<JClass<'local>>> {
+        match c.jni_cache.get(name) {
+            Some(global) => Ok(Some(env.new_local_ref(global)?)),
+            None => Ok(None),
+        }
+    })
+    .expect("Ctx installed during core_init")?;
+    if let Some(local) = hit {
+        return Ok(local);
+    }
+    // Miss: find the class, install a global, return the original local.
+    let cstring = CString::new(name).expect("class-name literal contains interior NUL byte");
+    let jni_str =
+        JNIStr::from_cstr(&cstring).expect("class-name literal is not valid modified UTF-8");
+    let class_local = env.find_class(jni_str)?;
+    let class_global = env.new_global_ref(&class_local)?;
+    with_ctx(|c| {
+        c.jni_cache.insert(name, class_global);
+    });
+    Ok(class_local)
 }

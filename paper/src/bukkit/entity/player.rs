@@ -1,6 +1,4 @@
-use jni::jni_str;
 use jni::objects::JObject;
-use jni::strings::JNIStr;
 
 use super::Entity;
 use crate::bukkit::{Audience, CommandSender};
@@ -17,7 +15,7 @@ pub struct Player<'local> {
 }
 
 impl<'local> Entity<'local> for Player<'local> {
-    const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/entity/Player");
+    const CLASS_NAME: &'static str = "org/bukkit/entity/Player";
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {
         Self { obj }
@@ -25,7 +23,7 @@ impl<'local> Entity<'local> for Player<'local> {
 }
 
 impl<'local> CommandSender<'local> for Player<'local> {
-    const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/entity/Player");
+    const CLASS_NAME: &'static str = "org/bukkit/entity/Player";
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {
         Self { obj }

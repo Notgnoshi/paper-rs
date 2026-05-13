@@ -1,5 +1,4 @@
 use jni::objects::JObject;
-use jni::strings::JNIStr;
 
 use crate::api::Api;
 
@@ -38,8 +37,8 @@ impl<'local> EntityInst<'local> {
     where
         T: Entity<'local>,
     {
+        let class = api.class(T::CLASS_NAME).ok()?;
         let env = api.jni();
-        let class = env.find_class(T::CLASS_NAME).ok()?;
         if env.is_instance_of(&self.obj, &class).ok()? {
             // SAFETY: just verified instanceof.
             Some(unsafe { T::from_obj(self.obj) })
@@ -54,7 +53,8 @@ impl<'local> EntityInst<'local> {
 /// Currently carries the narrowing infrastructure (`CLASS_NAME`, `from_obj`) used by
 /// [`EntityInst::cast`]. Interface methods will be added as default impls when callers need them.
 pub trait Entity<'local>: Sized {
-    const CLASS_NAME: &'static JNIStr;
+    /// Slash-delimited JVM class name, e.g. `"org/bukkit/entity/Sheep"`.
+    const CLASS_NAME: &'static str;
     /// # SAFETY
     ///
     /// obj must be a JNI ref to a Java instance of `CLASS_NAME`.

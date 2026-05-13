@@ -1,5 +1,4 @@
 use jni::objects::JObject;
-use jni::strings::JNIStr;
 use jni::{jni_sig, jni_str};
 
 use super::Event;
@@ -23,8 +22,7 @@ unsafe impl<'local> JObjectRepr<'local> for PlayerInteractEntityEventRef<'local>
 
 impl Event for PlayerInteractEntityEvent {
     type Wrapper<'local> = PlayerInteractEntityEventRef<'local>;
-    const CLASS_NAME: &'static JNIStr =
-        jni_str!("org/bukkit/event/player/PlayerInteractEntityEvent");
+    const CLASS_NAME: &'static str = "org/bukkit/event/player/PlayerInteractEntityEvent";
 }
 
 impl<'local> PlayerInteractEntityEventRef<'local> {

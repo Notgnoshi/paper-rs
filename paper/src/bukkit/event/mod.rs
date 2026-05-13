@@ -1,7 +1,7 @@
 use jni::Env;
 use jni::objects::JObject;
-use jni::strings::JNIStr;
 
+use crate::ctx;
 use crate::jobject_repr::JObjectRepr;
 
 mod entity_damage_by_entity_event;
@@ -20,7 +20,8 @@ pub use player_interact_entity_event::{PlayerInteractEntityEvent, PlayerInteract
 /// dispatch-time JNI lifetime.
 pub trait Event: 'static {
     type Wrapper<'local>: JObjectRepr<'local>;
-    const CLASS_NAME: &'static JNIStr;
+    /// Slash-delimited JVM class name, e.g. `"org/bukkit/event/player/PlayerInteractEntityEvent"`.
+    const CLASS_NAME: &'static str;
 
     /// Verify `obj` is an instance of `CLASS_NAME` and reinterpret as `&Wrapper`. Returns
     /// `Err(WrongObjectType)` if the check fails.
@@ -32,7 +33,7 @@ pub trait Event: 'static {
         env: &mut Env<'_>,
         obj: &'a JObject<'local>,
     ) -> jni::errors::Result<&'a Self::Wrapper<'local>> {
-        let class = env.find_class(Self::CLASS_NAME)?;
+        let class = ctx::cached_class(env, Self::CLASS_NAME)?;
         if !env.is_instance_of(obj, &class)? {
             return Err(jni::errors::Error::WrongObjectType);
         }

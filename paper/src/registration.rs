@@ -1,5 +1,4 @@
 use jni::objects::{JObject, JValue};
-use jni::strings::JNIStr;
 use jni::{Env, jni_sig, jni_str};
 
 use crate::ctx;
@@ -8,10 +7,10 @@ use crate::ctx;
 /// event class. The plugin reference comes from [`ctx::with_ctx`].
 pub(crate) fn subscribe_event<'local>(
     env: &mut Env<'local>,
-    event_class_name: &'static JNIStr,
+    event_class_name: &'static str,
     handler_id: i64,
 ) -> jni::errors::Result<()> {
-    let event_class = env.find_class(event_class_name)?;
+    let event_class = ctx::cached_class(env, event_class_name)?;
     let executor = env.new_object(
         jni_str!("io/paperrs/shim/RustEventExecutor"),
         jni_sig!("(J)V"),

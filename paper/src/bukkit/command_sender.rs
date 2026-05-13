@@ -1,8 +1,8 @@
 use jni::objects::{JObject, JString, JValue};
-use jni::strings::JNIStr;
 use jni::{Env, jni_sig, jni_str};
 
 use crate::api::Api;
+use crate::ctx;
 use crate::jobject_repr::JObjectRepr;
 
 /// Type-erased wrapper for an `org.bukkit.command.CommandSender` JNI reference.
@@ -24,7 +24,7 @@ impl<'local> CommandSenderInst<'local> {
         env: &mut Env<'_>,
         obj: &'a JObject<'local>,
     ) -> jni::errors::Result<&'a Self> {
-        let class = env.find_class(<Self as CommandSender>::CLASS_NAME)?;
+        let class = ctx::cached_class(env, <Self as CommandSender>::CLASS_NAME)?;
         if !env.is_instance_of(obj, &class)? {
             return Err(jni::errors::Error::WrongObjectType);
         }
@@ -38,8 +38,8 @@ impl<'local> CommandSenderInst<'local> {
     where
         T: CommandSender<'local>,
     {
+        let class = api.class(T::CLASS_NAME).ok()?;
         let env = api.jni();
-        let class = env.find_class(T::CLASS_NAME).ok()?;
         if env.is_instance_of(&self.obj, &class).ok()? {
             // SAFETY: just verified instanceof.
             Some(unsafe { T::from_obj(self.obj) })
@@ -50,7 +50,7 @@ impl<'local> CommandSenderInst<'local> {
 }
 
 impl<'local> CommandSender<'local> for CommandSenderInst<'local> {
-    const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/command/CommandSender");
+    const CLASS_NAME: &'static str = "org/bukkit/command/CommandSender";
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {
         Self { obj }
@@ -69,7 +69,8 @@ impl<'local> CommandSender<'local> for CommandSenderInst<'local> {
 /// `CLASS_NAME` and `from_obj` carry the narrowing infrastructure used by
 /// [`CommandSenderInst::cast`].
 pub trait CommandSender<'local>: Sized {
-    const CLASS_NAME: &'static JNIStr;
+    /// Slash-delimited JVM class name, e.g. `"org/bukkit/command/CommandSender"`.
+    const CLASS_NAME: &'static str;
 
     /// # SAFETY
     ///
