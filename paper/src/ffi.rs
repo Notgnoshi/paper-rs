@@ -8,7 +8,7 @@ use jni::{Env, EnvUnowned};
 ///
 /// When this function returns `Err`, a Java exception is already pending on the calling thread.
 /// The JNI calling convention requires the caller's `extern "C"` function to return an
-/// uninterpreted sentinel value (`JNI_FALSE`, `std::ptr::null()`, `0`, etc.) — Java ignores the
+/// uninterpreted sentinel value (`JNI_FALSE`, `std::ptr::null()`, `0`, etc.) - Java ignores the
 /// return value once an exception is pending. The `eyre::Report` carried in `Err` is provided for
 /// the caller's reference only; it has already been logged and surfaced to Java.
 ///

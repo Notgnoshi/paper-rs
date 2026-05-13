@@ -3,19 +3,19 @@ use jni::strings::JNIStr;
 use jni::{Env, jni_sig, jni_str};
 
 use crate::api::Api;
+use crate::jobject_repr::JObjectRepr;
 
 /// Type-erased wrapper for an `org.bukkit.command.CommandSender` JNI reference.
 ///
 /// Provides the [`CommandSender`] trait surface (name, send_message, send_plain) plus
 /// [`CommandSenderInst::cast`] to narrow to a specific subtype.
-///
-/// `#[repr(transparent)]` over `JObject` so we can reinterpret a borrowed `&JObject` as a borrowed
-/// `&CommandSenderInst` at dispatch time. The reinterpret is gated by an `is_instance_of` check in
-/// `wrap_ref` so a Bukkit contract change can't silently feed us the wrong class.
 #[repr(transparent)]
 pub struct CommandSenderInst<'local> {
     pub(crate) obj: JObject<'local>,
 }
+
+// SAFETY: `#[repr(transparent)]` over `JObject<'local>`
+unsafe impl<'local> JObjectRepr<'local> for CommandSenderInst<'local> {}
 
 impl<'local> CommandSenderInst<'local> {
     /// Verify the JObject is an `org.bukkit.command.CommandSender` and reinterpret as a borrowed
@@ -28,9 +28,7 @@ impl<'local> CommandSenderInst<'local> {
         if !env.is_instance_of(obj, &class)? {
             return Err(jni::errors::Error::WrongObjectType);
         }
-        // SAFETY: just verified instanceof; CommandSenderInst is repr(transparent) over
-        // JObject<'local>.
-        Ok(unsafe { &*(obj as *const JObject<'local> as *const Self) })
+        Ok(Self::from_jobject_ref(obj))
     }
 
     /// Try to narrow this sender to a more specific subtype.

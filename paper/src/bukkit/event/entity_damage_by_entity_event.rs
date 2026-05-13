@@ -1,42 +1,28 @@
 use jni::objects::JObject;
 use jni::strings::JNIStr;
-use jni::{Env, jni_sig, jni_str};
+use jni::{jni_sig, jni_str};
 
 use super::Event;
 use crate::api::Api;
 use crate::bukkit::{Entity, EntityInst, Player};
+use crate::jobject_repr::JObjectRepr;
 
 /// Marker type. Used in `PluginBuilder::on::<EntityDamageByEntityEvent>`.
 pub struct EntityDamageByEntityEvent;
 
 /// Wrapper for an `org.bukkit.event.entity.EntityDamageByEntityEvent` JNI reference.
-///
-/// `#[repr(transparent)]` so dispatch can reinterpret a borrowed `&JObject` as a borrowed
-/// `&EntityDamageByEntityEventRef`.
 #[repr(transparent)]
 pub struct EntityDamageByEntityEventRef<'local> {
     obj: JObject<'local>,
 }
 
+// SAFETY: `#[repr(transparent)]` over `JObject<'local>`
+unsafe impl<'local> JObjectRepr<'local> for EntityDamageByEntityEventRef<'local> {}
+
 impl Event for EntityDamageByEntityEvent {
     type Wrapper<'local> = EntityDamageByEntityEventRef<'local>;
     const CLASS_NAME: &'static JNIStr =
         jni_str!("org/bukkit/event/entity/EntityDamageByEntityEvent");
-
-    fn wrap<'a, 'local>(
-        env: &mut Env<'_>,
-        obj: &'a JObject<'local>,
-    ) -> jni::errors::Result<&'a Self::Wrapper<'local>> {
-        let class = env.find_class(Self::CLASS_NAME)?;
-        if !env.is_instance_of(obj, &class)? {
-            return Err(jni::errors::Error::WrongObjectType);
-        }
-        // SAFETY: just verified instanceof; EntityDamageByEntityEventRef is repr(transparent)
-        // over JObject<'local>.
-        Ok(unsafe {
-            &*(obj as *const JObject<'local> as *const EntityDamageByEntityEventRef<'local>)
-        })
-    }
 }
 
 impl<'local> EntityDamageByEntityEventRef<'local> {

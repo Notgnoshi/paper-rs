@@ -35,7 +35,7 @@ static SUBSCRIBER_INIT: Once = Once::new();
 ///
 /// First call: caches the JVM, acquires a `Global<JClass>` for the dispatcher, and installs the
 /// process-global tracing subscriber. Subsequent calls (on each `/reload`) replace the dispatcher
-/// `Global` with a fresh one — the previous one's `Drop` releases its pin on the prior
+/// `Global` with a fresh one - the previous one's `Drop` releases its pin on the prior
 /// `ClassLoader`, so it can be GC'd along with the unloaded plugin.
 ///
 /// Returns `Err` if any JNI lookup fails; the caller may treat this as best-effort and continue

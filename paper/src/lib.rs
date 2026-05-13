@@ -9,6 +9,7 @@ mod core_init;
 pub(crate) mod ctx;
 mod dispatch;
 pub(crate) mod ffi;
+pub mod jobject_repr;
 mod registration;
 
 pub use api::Api;

@@ -2,6 +2,8 @@ use jni::Env;
 use jni::objects::JObject;
 use jni::strings::JNIStr;
 
+use crate::jobject_repr::JObjectRepr;
+
 mod entity_damage_by_entity_event;
 mod player_interact_entity_event;
 
@@ -16,20 +18,24 @@ pub use player_interact_entity_event::{PlayerInteractEntityEvent, PlayerInteract
 /// This indirection sidesteps Rust's lack of HKT: we want `PluginBuilder::on` to accept any event
 /// marker and dispatch to a handler whose argument is the corresponding wrapper at the
 /// dispatch-time JNI lifetime.
-///
-/// The `wrap` method is verified at the dispatch boundary: it does an `is_instance_of` check before
-/// reinterpreting the JObject as a `Wrapper`, so a Bukkit contract change can't silently feed us
-/// the wrong class.
 pub trait Event: 'static {
-    type Wrapper<'local>;
+    type Wrapper<'local>: JObjectRepr<'local>;
     const CLASS_NAME: &'static JNIStr;
+
     /// Verify `obj` is an instance of `CLASS_NAME` and reinterpret as `&Wrapper`. Returns
     /// `Err(WrongObjectType)` if the check fails.
     ///
-    /// SAFETY contract for implementors: `Wrapper<'local>` MUST be `#[repr(transparent)]` over
-    /// `JObject<'local>`. paper-rs's built-in impls satisfy this; user-defined impls must too.
+    /// The default impl is appropriate for every event whose `Wrapper` is a `#[repr(transparent)]`
+    /// newtype over `JObject<'local>` (which the [`JObjectRepr`] bound already requires); there's
+    /// no reason to override it.
     fn wrap<'a, 'local>(
         env: &mut Env<'_>,
         obj: &'a JObject<'local>,
-    ) -> jni::errors::Result<&'a Self::Wrapper<'local>>;
+    ) -> jni::errors::Result<&'a Self::Wrapper<'local>> {
+        let class = env.find_class(Self::CLASS_NAME)?;
+        if !env.is_instance_of(obj, &class)? {
+            return Err(jni::errors::Error::WrongObjectType);
+        }
+        Ok(Self::Wrapper::from_jobject_ref(obj))
+    }
 }
