@@ -4,7 +4,7 @@ use jni::{jni_sig, jni_str};
 use super::ClickCallbackOptions;
 use crate::api::Api;
 use crate::bukkit::Key;
-use crate::callbacks;
+use crate::ctx;
 
 /// Wrapper for an `io.papermc.paper.registry.data.dialog.action.DialogAction` JNI reference.
 #[repr(transparent)]
@@ -53,8 +53,12 @@ impl<'local> DialogAction<'local> {
         F: for<'a> Fn(&mut Api<'_, 'a>, &JObject<'a>, &JObject<'a>) + Send + Sync + 'static,
     {
         let env = api.jni();
-        let id = callbacks::next_id();
-        callbacks::register(id, Box::new(callback));
+        let id = ctx::with_ctx(|c| {
+            let id = c.next_callback_id();
+            c.callbacks.insert(id, Box::new(callback));
+            id
+        })
+        .expect("Ctx installed during core_init");
 
         let bridge = env.new_object(
             jni_str!("io/paperrs/shim/RustDialogActionCallback"),

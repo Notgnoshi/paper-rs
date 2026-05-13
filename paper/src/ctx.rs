@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::callbacks::BiConsumerFn;
 use crate::dispatch::{CommandHandler, EventHandler};
 
 /// Reload-scoped state for a Paper plugin.
@@ -15,7 +16,9 @@ use crate::dispatch::{CommandHandler, EventHandler};
 pub(crate) struct Ctx {
     pub(crate) event_handlers: HashMap<i64, EventHandler>,
     pub(crate) command_handlers: HashMap<i64, CommandHandler>,
+    pub(crate) callbacks: HashMap<i64, BiConsumerFn>,
     next_handler_id: i64,
+    next_callback_id: i64,
 }
 
 impl Ctx {
@@ -23,7 +26,9 @@ impl Ctx {
         Self {
             event_handlers: HashMap::new(),
             command_handlers: HashMap::new(),
+            callbacks: HashMap::new(),
             next_handler_id: 1,
+            next_callback_id: 1,
         }
     }
 
@@ -33,6 +38,15 @@ impl Ctx {
     pub(crate) fn next_handler_id(&mut self) -> i64 {
         let id = self.next_handler_id;
         self.next_handler_id += 1;
+        id
+    }
+
+    /// Allocate a fresh callback id for a Java functional-interface bridge.
+    ///
+    /// Ids are unique within a single plugin load; reset to 1 on each plugin reload.
+    pub(crate) fn next_callback_id(&mut self) -> i64 {
+        let id = self.next_callback_id;
+        self.next_callback_id += 1;
         id
     }
 }
