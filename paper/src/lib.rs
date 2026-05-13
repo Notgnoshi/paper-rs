@@ -6,6 +6,7 @@ mod builder;
 pub mod bukkit;
 pub(crate) mod callbacks;
 mod core_init;
+pub(crate) mod ctx;
 mod dispatch;
 mod logger;
 mod registration;

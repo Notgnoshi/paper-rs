@@ -5,7 +5,7 @@ use jni::{Env, EnvUnowned};
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
-use crate::{CORE_ABI_VERSION, CoreApi, callbacks, dispatch, logger, registration};
+use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, logger, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
 static CORE_API: CoreApi = CoreApi {
@@ -30,6 +30,7 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
         callbacks::clear();
         crate::bukkit::mini_message::shutdown();
         logger::shutdown_logger();
+        ctx::uninstall();
         Ok(())
     });
     match outcome.into_outcome() {
@@ -64,6 +65,11 @@ where
     let mut unowned = unsafe { EnvUnowned::from_raw(env) };
     let outcome = unowned
         .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
+            if ctx::install(ctx::Ctx::new()).is_err() {
+                let _ =
+                    env.throw("paper_core_init: Ctx already initialized (prior shutdown missing)");
+                return Err(jni::errors::Error::JavaException);
+            }
             logger::install_logger(env)?;
             let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
             let mut builder = PluginBuilder::new(env, &plugin_obj);
