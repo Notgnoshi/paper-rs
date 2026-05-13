@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+arc-swap.workspace = true
 jni.workspace = true
 libloading.workspace = true
 paper.workspace = true

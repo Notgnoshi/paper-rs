@@ -4,9 +4,9 @@
 //! and then dlopen the actual plugin here, so that we can close it and reload it on demand.
 use std::ffi::OsStr;
 use std::mem::size_of;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::Arc;
 
+use arc_swap::ArcSwapOption;
 use jni::errors::{Error, ThrowRuntimeExAndDefault};
 use jni::objects::{JClass, JObject, JString};
 use jni::sys::{JNI_FALSE, jboolean, jlong, jobject, jobjectArray};
@@ -14,19 +14,37 @@ use jni::{Env, EnvUnowned};
 use libloading::{Library, Symbol};
 use paper::{CORE_ABI_VERSION, CoreApi};
 
-static CORE_LIB: Mutex<Option<Library>> = Mutex::new(None);
-static CORE_API: AtomicPtr<CoreApi> = AtomicPtr::new(std::ptr::null_mut());
+/// A loaded core plugin: the `dlopen`-managed library and the function-pointer table it exported
+/// at `paper_core_init` time.
+struct LoadedCore {
+    _lib: Library,
+    api: *const CoreApi,
+}
+
+// SAFETY: `api` points at a `static CoreApi` inside the dlopen'd core. The table is constructed
+// once at core init time and never mutated; all entries are bare `extern "C" fn` pointers, which
+// are `Send + Sync`. The `Library` is `Send + Sync` already.
+unsafe impl Send for LoadedCore {}
+unsafe impl Sync for LoadedCore {}
+
+/// Active core, or `None` between shutdown and the next init.
+///
+/// `ArcSwap` lets dispatch threads grab the current `Arc<LoadedCore>` with a single atomic load
+/// without lock contention.
+static CORE: ArcSwapOption<LoadedCore> = ArcSwapOption::const_empty();
 
 /// Symbol the loader looks up in the core .so
 const CORE_INIT_SYMBOL: &[u8] = b"paper_core_init";
 
 type CoreInitFn = unsafe extern "C" fn(*mut jni::sys::JNIEnv, jni::sys::jobject) -> *const CoreApi;
 
-/// Drop the cached library + API pointer. Caller must have already invoked
-/// core's shutdown (so the core can release JNI globals before its .so unloads).
+/// Drop the cached `LoadedCore`. The dlclose that frees the underlying .so won't happen until
+/// the last in-flight dispatch releases its `Arc` reference.
+///
+/// Caller is responsible for having invoked the core's `shutdown` first so the core can release its
+/// JNI globals before the mapping disappears.
 fn unload_core() {
-    CORE_API.store(std::ptr::null_mut(), Ordering::SeqCst);
-    *CORE_LIB.lock().unwrap() = None;
+    CORE.store(None);
 }
 
 fn load_core(
@@ -59,18 +77,11 @@ fn load_core(
             size_of::<CoreApi>(),
         ));
     }
-    *CORE_LIB.lock().unwrap() = Some(lib);
-    CORE_API.store(api_ptr as *mut CoreApi, Ordering::SeqCst);
+    CORE.store(Some(Arc::new(LoadedCore {
+        _lib: lib,
+        api: api_ptr,
+    })));
     Ok(api_ptr)
-}
-
-fn current_api() -> Option<*const CoreApi> {
-    let p = CORE_API.load(Ordering::SeqCst);
-    if p.is_null() {
-        None
-    } else {
-        Some(p as *const CoreApi)
-    }
 }
 
 #[unsafe(no_mangle)]
@@ -84,10 +95,14 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_init<'local>(
     unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
             let path = core_path.try_to_string(env)?;
-            if let Some(api) = current_api() {
+            // Atomically take ownership of any stale core. Dispatch threads hitting the
+            // swap-to-None window still hold guards on the old Arc, so its `Library` won't
+            // dlclose until they drop.
+            let stale = CORE.swap(None);
+            if let Some(core) = stale.as_ref() {
                 eprintln!("paper-loader: stale CoreApi present; running shutdown before re-load");
-                let _ = unsafe { ((*api).shutdown)(env.get_raw()) };
-                unload_core();
+                let _ = unsafe { ((*core.api).shutdown)(env.get_raw()) };
+                drop(stale);
             }
             eprintln!("paper-loader: dlopen({path})");
             let _api_ptr = load_core(&path, env.get_raw(), plugin.as_raw()).map_err(|msg| {
@@ -109,9 +124,11 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_shutdown<'local>(
     eprintln!("paper-loader: shutdown entered");
     let _ = unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
-            if let Some(api) = current_api() {
+            let guard = CORE.load();
+            if let Some(core) = guard.as_ref() {
                 eprintln!("paper-loader: calling core shutdown");
-                let _ = unsafe { ((*api).shutdown)(env.get_raw()) };
+                let _ = unsafe { ((*core.api).shutdown)(env.get_raw()) };
+                drop(guard);
                 eprintln!("paper-loader: dropping core library (dlclose)");
                 unload_core();
                 eprintln!("paper-loader: unload complete");
@@ -130,11 +147,14 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchEvent<'local>(
     handler_id: jlong,
     event: jobject,
 ) {
-    let Some(api) = current_api() else { return };
+    let guard = CORE.load();
+    let Some(core) = guard.as_ref() else { return };
     // Forward without entering with_env: core's dispatch_event will set up
     // its own EnvUnowned/with_env from the raw pointer.
     let raw_env = EnvUnowned::into_raw(unowned);
-    unsafe { ((*api).dispatch_event)(raw_env, handler_id, event) };
+    unsafe { ((*core.api).dispatch_event)(raw_env, handler_id, event) };
+    // `guard` drops here; the `Arc<LoadedCore>` only fully releases once all such guards have
+    // returned, so the .so mapping can't disappear out from under an in-flight dispatch.
 }
 
 #[unsafe(no_mangle)]
@@ -145,11 +165,12 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchCommand<'local>(
     sender: jobject,
     args: jobjectArray,
 ) -> jboolean {
-    let Some(api) = current_api() else {
+    let guard = CORE.load();
+    let Some(core) = guard.as_ref() else {
         return JNI_FALSE;
     };
     let raw_env = EnvUnowned::into_raw(unowned);
-    unsafe { ((*api).dispatch_command)(raw_env, handler_id, sender, args) }
+    unsafe { ((*core.api).dispatch_command)(raw_env, handler_id, sender, args) }
 }
 
 #[unsafe(no_mangle)]
@@ -160,11 +181,12 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchTabComplete<'local>(
     sender: jobject,
     args: jobjectArray,
 ) -> jobject {
-    let Some(api) = current_api() else {
+    let guard = CORE.load();
+    let Some(core) = guard.as_ref() else {
         return std::ptr::null_mut();
     };
     let raw_env = EnvUnowned::into_raw(unowned);
-    unsafe { ((*api).dispatch_tab_complete)(raw_env, handler_id, sender, args) }
+    unsafe { ((*core.api).dispatch_tab_complete)(raw_env, handler_id, sender, args) }
 }
 
 /// Bridge for `RustDialogActionCallback.bridgeDispatch(long id, Object t, Object u)`.
@@ -176,9 +198,10 @@ pub extern "system" fn Java_io_paperrs_shim_RustDialogActionCallback_bridgeDispa
     t: jobject,
     u: jobject,
 ) {
-    let Some(api) = current_api() else { return };
+    let guard = CORE.load();
+    let Some(core) = guard.as_ref() else { return };
     let raw_env = EnvUnowned::into_raw(unowned);
-    unsafe { ((*api).dispatch_bi_consumer)(raw_env, id, t, u) };
+    unsafe { ((*core.api).dispatch_bi_consumer)(raw_env, id, t, u) };
 }
 
 /// Bridge for `RustDialogActionCallback.bridgeDrop(long id)`, called from Cleaner.
@@ -188,6 +211,7 @@ pub extern "system" fn Java_io_paperrs_shim_RustDialogActionCallback_bridgeDrop<
     _class: JClass<'local>,
     id: jlong,
 ) {
-    let Some(api) = current_api() else { return };
-    unsafe { ((*api).drop_callback)(id) };
+    let guard = CORE.load();
+    let Some(core) = guard.as_ref() else { return };
+    unsafe { ((*core.api).drop_callback)(id) };
 }
