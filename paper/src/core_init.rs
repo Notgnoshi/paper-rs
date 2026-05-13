@@ -1,10 +1,11 @@
 use std::mem::size_of;
 
+use jni::Env;
 use jni::objects::JObject;
-use jni::{Env, EnvUnowned};
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
+use crate::ffi;
 use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, logger, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
@@ -20,8 +21,7 @@ static CORE_API: CoreApi = CoreApi {
 };
 
 unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
         if let Err(e) = registration::unregister_commands(env) {
             warn!("unregister_commands failed: {e}");
             env.exception_clear();
@@ -35,16 +35,9 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
         ctx::uninstall();
         Ok(())
     });
-    match outcome.into_outcome() {
-        jni::Outcome::Ok(_) => 0,
-        jni::Outcome::Err(e) => {
-            warn!("core_shutdown failed: {e}");
-            1
-        }
-        jni::Outcome::Panic(_) => {
-            warn!("core_shutdown panicked");
-            2
-        }
+    match result {
+        Ok(()) => 0,
+        Err(_) => 1,
     }
 }
 
@@ -64,30 +57,19 @@ pub fn core_init<F>(
 where
     F: FnOnce(&mut PluginBuilder<'_, '_>) -> jni::errors::Result<()>,
 {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let outcome = unowned
-        .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
-            let plugin_global = env.new_global_ref(&plugin_obj)?;
-            if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
-                let _ =
-                    env.throw("paper_core_init: Ctx already initialized (prior shutdown missing)");
-                return Err(jni::errors::Error::JavaException);
-            }
-            logger::install_logger(env)?;
-            let mut builder = PluginBuilder::new(env);
-            build(&mut builder)
-        })
-        .into_outcome();
-    match outcome {
-        jni::Outcome::Ok(_) => &CORE_API,
-        jni::Outcome::Err(e) => {
-            tracing::error!("paper_core_init failed: {e}");
-            std::ptr::null()
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
+        let plugin_global = env.new_global_ref(&plugin_obj)?;
+        if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
+            eyre::bail!("paper_core_init: Ctx already initialized (prior shutdown missing)");
         }
-        jni::Outcome::Panic(p) => {
-            tracing::error!("paper_core_init panicked: {p:?}");
-            std::ptr::null()
-        }
+        logger::install_logger(env)?;
+        let mut builder = PluginBuilder::new(env);
+        build(&mut builder)?;
+        Ok(())
+    });
+    match result {
+        Ok(()) => &CORE_API,
+        Err(_) => std::ptr::null(),
     }
 }

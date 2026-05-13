@@ -8,6 +8,7 @@ pub(crate) mod callbacks;
 mod core_init;
 pub(crate) mod ctx;
 mod dispatch;
+pub(crate) mod ffi;
 mod logger;
 mod registration;
 

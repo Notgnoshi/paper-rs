@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use jni::Env;
 use jni::objects::{JObject, JObjectArray, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jlong, jobject, jobjectArray};
-use jni::{Env, EnvUnowned};
 use tracing::warn;
 
-use crate::ctx;
+use crate::{ctx, ffi};
 
 pub(crate) type EventHandler = Arc<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>) + Send + Sync>;
 pub(crate) type CommandHandler =
@@ -16,19 +16,16 @@ pub(crate) unsafe extern "C" fn dispatch_event(
     handler_id: jlong,
     event: jobject,
 ) {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let _ = unowned
-        .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            let event_obj = unsafe { JObject::from_raw(env, event) };
-            let handler = ctx::with_ctx(|c| c.event_handlers.get(&handler_id).cloned()).flatten();
-            let Some(handler) = handler else {
-                warn!("no event handler registered for id {handler_id}");
-                return Ok(());
-            };
-            handler(env, &event_obj);
-            Ok(())
-        })
-        .into_outcome();
+    let _ = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        let event_obj = unsafe { JObject::from_raw(env, event) };
+        let handler = ctx::with_ctx(|c| c.event_handlers.get(&handler_id).cloned()).flatten();
+        let Some(handler) = handler else {
+            warn!("no event handler registered for id {handler_id}");
+            return Ok(());
+        };
+        handler(env, &event_obj);
+        Ok(())
+    });
 }
 
 pub(crate) unsafe extern "C" fn dispatch_command(
@@ -37,8 +34,7 @@ pub(crate) unsafe extern "C" fn dispatch_command(
     sender: jobject,
     args: jobjectArray,
 ) -> jboolean {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<bool> {
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<bool> {
         let sender_obj = unsafe { JObject::from_raw(env, sender) };
         let args_arr = unsafe { JObjectArray::<JString>::from_raw(env, args) };
         let args_vec = read_string_array(env, &args_arr)?;
@@ -49,15 +45,10 @@ pub(crate) unsafe extern "C" fn dispatch_command(
         };
         Ok(handler(env, &sender_obj, &args_vec))
     });
-    match outcome.into_outcome() {
-        jni::Outcome::Ok(b) => {
-            if b {
-                JNI_TRUE
-            } else {
-                JNI_FALSE
-            }
-        }
-        _ => JNI_FALSE,
+    match result {
+        Ok(true) => JNI_TRUE,
+        Ok(false) => JNI_FALSE,
+        Err(_) => JNI_FALSE,
     }
 }
 
