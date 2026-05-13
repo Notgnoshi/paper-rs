@@ -42,6 +42,6 @@ public final class PaperFfiLogger {
         }
         int idx = Math.max(0, Math.min(level, JAVA_LEVELS.length - 1));
         Level effective = idx <= 2 ? JAVA_LEVELS[idx] : Level.INFO;
-        l.log(effective, "(" + RUST_LEVELS[idx] + ": " + target + ") " + message);
+        l.log(effective, "[" + RUST_LEVELS[idx] + ": " + target + "] " + message);
     }
 }

@@ -92,10 +92,27 @@ impl<S: Subscriber> Layer<S> for JniLayer {
             tracing::Level::TRACE => 4,
         };
 
-        let target = event.metadata().target().to_string();
         let mut message = String::new();
-        let mut visitor = MessageVisitor(&mut message);
+        let mut fields: Vec<(&'static str, String)> = Vec::new();
+        let mut visitor = EventVisitor {
+            message: &mut message,
+            fields: &mut fields,
+        };
         event.record(&mut visitor);
+
+        // Embed structured fields into the target string the Java dispatcher already prints in
+        // the prefix. `tracing::info!(id = 7, "loaded")` lands in the log as
+        // `[INFO: paper_loader, id=7] loaded` instead of dropping `id` on the floor.
+        let target = if fields.is_empty() {
+            event.metadata().target().to_string()
+        } else {
+            use std::fmt::Write;
+            let mut t = String::from(event.metadata().target());
+            for (k, v) in &fields {
+                let _ = write!(t, ", {k}={v}");
+            }
+            t
+        };
 
         let _ = jvm.attach_current_thread(|env: &mut Env| -> jni::errors::Result<()> {
             let target_jstr = env.new_string(&target)?;
@@ -115,13 +132,25 @@ impl<S: Subscriber> Layer<S> for JniLayer {
     }
 }
 
-struct MessageVisitor<'a>(&'a mut String);
+/// Splits a tracing event's recorded fields into its message text and the rest.
+///
+/// `record_debug` is the only method we override; the other `record_*` variants on
+/// `tracing::field::Visit` default to calling `record_debug`, so this catches all field types
+/// (str, i64, u64, bool, etc.) without per-type plumbing.
+struct EventVisitor<'a> {
+    message: &'a mut String,
+    fields: &'a mut Vec<(&'static str, String)>,
+}
 
-impl<'a> tracing::field::Visit for MessageVisitor<'a> {
+impl<'a> tracing::field::Visit for EventVisitor<'a> {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         use std::fmt::Write;
         if field.name() == "message" {
-            let _ = write!(self.0, "{value:?}");
+            let _ = write!(self.message, "{value:?}");
+        } else {
+            let mut s = String::new();
+            let _ = write!(s, "{value:?}");
+            self.fields.push((field.name(), s));
         }
     }
 }
