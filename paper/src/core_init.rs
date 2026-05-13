@@ -26,6 +26,10 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
             warn!("unregister_commands failed: {e}");
             env.exception_clear();
         }
+        if let Err(e) = registration::unregister_all_listeners(env) {
+            warn!("unregister_all_listeners failed: {e}");
+            env.exception_clear();
+        }
         logger::shutdown_logger();
         // Drops any static state initialized during plugin runtime along with any captured JNI globals.
         ctx::uninstall();
