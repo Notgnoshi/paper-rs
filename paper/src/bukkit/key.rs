@@ -9,6 +9,10 @@ pub struct Key<'local> {
     pub(crate) obj: JObject<'local>,
 }
 
+// `Key::key` mirrors Adventure's `Key.key(String, String)` static factory; following the Java
+// name is the convention across the bukkit wrappers, so the `self_named_constructors` clippy lint
+// is a non-issue here.
+#[allow(clippy::self_named_constructors)]
 impl<'local> Key<'local> {
     /// Construct a Key from a namespace and value, e.g. `Key::key(api, "disco", "sheep_baaa")`
     /// for `disco:sheep_baaa`.

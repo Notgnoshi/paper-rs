@@ -1,7 +1,7 @@
 use jni::Env;
 use jni::objects::JClass;
 
-use crate::ctx::{self, Ctx};
+use crate::ctx;
 
 pub struct Api<'a, 'local> {
     env: &'a mut Env<'local>,
@@ -24,13 +24,5 @@ impl<'a, 'local> Api<'a, 'local> {
     /// the per-plugin cache for the lifetime of the load.
     pub fn class(&mut self, name: &'static str) -> eyre::Result<JClass<'local>> {
         Ok(ctx::cached_class(self.env, name)?)
-    }
-
-    /// Run `body` with mutable access to the per-plugin [`Ctx`].
-    ///
-    /// Returns `None` if Ctx is not initialized (shouldn't happen from a handler; Ctx is alive
-    /// between `core_init` and `core_shutdown`).
-    pub(crate) fn with_ctx<R>(&mut self, body: impl FnOnce(&mut Ctx) -> R) -> Option<R> {
-        ctx::with_ctx(body)
     }
 }

@@ -153,6 +153,10 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_shutdown<'local>(
         .into_outcome();
 }
 
+// JNI native-method export: callers are the JVM, which is responsible for jobject validity. The
+// allow covers the raw `jobject`/`jobjectArray` params that get forwarded into the core's
+// `unsafe extern "C"` dispatch entrypoint.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchEvent<'local>(
     unowned: EnvUnowned<'local>,
@@ -170,6 +174,8 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchEvent<'local>(
     // returned, so the .so mapping can't disappear out from under an in-flight dispatch.
 }
 
+// JNI native-method export: jobject params come from the JVM and are forwarded into core.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchCommand<'local>(
     unowned: EnvUnowned<'local>,
@@ -186,6 +192,8 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchCommand<'local>(
     unsafe { ((*core.api).dispatch_command)(raw_env, handler_id, sender, args) }
 }
 
+// JNI native-method export: jobject params come from the JVM and are forwarded into core.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchTabComplete<'local>(
     unowned: EnvUnowned<'local>,
@@ -203,6 +211,9 @@ pub extern "system" fn Java_io_paperrs_shim_PaperRs_dispatchTabComplete<'local>(
 }
 
 /// Bridge for `RustDialogActionCallback.bridgeDispatch(long id, Object t, Object u)`.
+//
+// JNI native-method export: jobject params come from the JVM and are forwarded into core.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_paperrs_shim_RustDialogActionCallback_bridgeDispatch<'local>(
     unowned: EnvUnowned<'local>,
