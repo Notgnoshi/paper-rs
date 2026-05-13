@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use jni::objects::JObject;
 use jni::sys::{JNIEnv, jlong, jobject};
 use jni::{Env, EnvUnowned};
@@ -9,7 +11,7 @@ use crate::ctx;
 /// A Rust closure backing a two-argument Java functional interface (e.g.,
 /// `DialogActionCallback.accept(DialogResponseView, Audience)`).
 pub(crate) type BiConsumerFn =
-    Box<dyn for<'a> Fn(&mut Api<'_, 'a>, &JObject<'a>, &JObject<'a>) + Send + Sync>;
+    Arc<dyn for<'a> Fn(&mut Api<'_, 'a>, &JObject<'a>, &JObject<'a>) + Send + Sync>;
 
 /// Trampoline target for the `RustDialogActionCallback.bridgeDispatch` native method.
 ///
@@ -26,14 +28,13 @@ pub(crate) unsafe extern "C" fn dispatch_bi_consumer(
         .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
             let t_obj = unsafe { JObject::from_raw(env, t) };
             let u_obj = unsafe { JObject::from_raw(env, u) };
-            ctx::with_ctx(|c| {
-                let Some(callback) = c.callbacks.get(&id) else {
-                    warn!("no callback registered for id {id}");
-                    return;
-                };
-                let mut api = Api::new(env);
-                callback(&mut api, &t_obj, &u_obj);
-            });
+            let callback = ctx::with_ctx(|c| c.callbacks.get(&id).cloned()).flatten();
+            let Some(callback) = callback else {
+                warn!("no callback registered for id {id}");
+                return Ok(());
+            };
+            let mut api = Api::new(env);
+            callback(&mut api, &t_obj, &u_obj);
             Ok(())
         })
         .into_outcome();

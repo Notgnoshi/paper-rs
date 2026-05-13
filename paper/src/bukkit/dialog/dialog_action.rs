@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use jni::objects::{JObject, JValue};
 use jni::{jni_sig, jni_str};
 
@@ -55,7 +57,7 @@ impl<'local> DialogAction<'local> {
         let env = api.jni();
         let id = ctx::with_ctx(|c| {
             let id = c.next_callback_id();
-            c.callbacks.insert(id, Box::new(callback));
+            c.callbacks.insert(id, Arc::new(callback));
             id
         })
         .expect("Ctx installed during core_init");

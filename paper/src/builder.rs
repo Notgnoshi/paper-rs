@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use jni::Env;
 use jni::objects::JObject;
 
@@ -50,7 +52,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             let id = c.next_handler_id();
             c.event_handlers.insert(
                 id,
-                Box::new(move |env, obj| match E::wrap(env, obj) {
+                Arc::new(move |env, obj| match E::wrap(env, obj) {
                     Ok(wrapper) => {
                         let mut api = Api::new(env);
                         handler(&mut api, wrapper);
@@ -97,7 +99,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             let id = c.next_handler_id();
             c.command_handlers.insert(
                 id,
-                Box::new(move |env, sender_obj, args| {
+                Arc::new(move |env, sender_obj, args| {
                     match CommandSenderInst::wrap_ref(env, sender_obj) {
                         Ok(sender) => {
                             let mut api = Api::new(env);
