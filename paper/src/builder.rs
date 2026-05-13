@@ -26,12 +26,11 @@ fn actual_class_name(env: &mut Env<'_>, obj: &JObject<'_>) -> String {
 
 pub struct PluginBuilder<'a, 'local> {
     pub(crate) env: &'a mut Env<'local>,
-    pub(crate) plugin: &'a JObject<'local>,
 }
 
 impl<'a, 'local> PluginBuilder<'a, 'local> {
-    pub(crate) fn new(env: &'a mut Env<'local>, plugin: &'a JObject<'local>) -> Self {
-        Self { env, plugin }
+    pub(crate) fn new(env: &'a mut Env<'local>) -> Self {
+        Self { env }
     }
 
     /// Register a Bukkit event handler.
@@ -77,7 +76,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             id
         })
         .expect("Ctx installed during core_init");
-        registration::subscribe_event(self.env, self.plugin, E::CLASS_NAME, id)
+        registration::subscribe_event(self.env, E::CLASS_NAME, id)
     }
 
     /// Register a Bukkit command handler under `name`.
@@ -114,6 +113,6 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             id
         })
         .expect("Ctx installed during core_init");
-        registration::register_command(self.env, self.plugin, name, id)
+        registration::register_command(self.env, name, id)
     }
 }

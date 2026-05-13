@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use jni::objects::JObject;
+use jni::refs::Global;
+
 use crate::callbacks::BiConsumerFn;
 use crate::dispatch::{CommandHandler, EventHandler};
 
@@ -14,6 +17,13 @@ use crate::dispatch::{CommandHandler, EventHandler};
 ///
 /// User plugin code does not see `Ctx` directly; access is through `crate::Api` helpers.
 pub(crate) struct Ctx {
+    /// JNI global reference to the Java plugin object. Used wherever a registration sites needs
+    /// to pass the plugin into a Bukkit call (event subscription, command registration, listener
+    /// unregistration).
+    pub(crate) plugin: Global<JObject<'static>>,
+    /// Bukkit `Command` instances we've registered with the CommandMap. Drained at shutdown so
+    /// the CommandMap doesn't retain stale handlers across `/reload`.
+    pub(crate) registered_commands: Vec<Global<JObject<'static>>>,
     pub(crate) event_handlers: HashMap<i64, EventHandler>,
     pub(crate) command_handlers: HashMap<i64, CommandHandler>,
     pub(crate) callbacks: HashMap<i64, BiConsumerFn>,
@@ -22,8 +32,10 @@ pub(crate) struct Ctx {
 }
 
 impl Ctx {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(plugin: Global<JObject<'static>>) -> Self {
         Self {
+            plugin,
+            registered_commands: Vec::new(),
             event_handlers: HashMap::new(),
             command_handlers: HashMap::new(),
             callbacks: HashMap::new(),

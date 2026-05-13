@@ -64,14 +64,15 @@ where
     let mut unowned = unsafe { EnvUnowned::from_raw(env) };
     let outcome = unowned
         .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            if ctx::install(ctx::Ctx::new()).is_err() {
+            let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
+            let plugin_global = env.new_global_ref(&plugin_obj)?;
+            if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
                 let _ =
                     env.throw("paper_core_init: Ctx already initialized (prior shutdown missing)");
                 return Err(jni::errors::Error::JavaException);
             }
             logger::install_logger(env)?;
-            let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
-            let mut builder = PluginBuilder::new(env, &plugin_obj);
+            let mut builder = PluginBuilder::new(env);
             build(&mut builder)
         })
         .into_outcome();
