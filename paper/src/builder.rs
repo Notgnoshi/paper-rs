@@ -4,7 +4,7 @@ use jni::objects::JObject;
 use crate::api::Api;
 use crate::bukkit::CommandSenderInst;
 use crate::bukkit::event::Event;
-use crate::{dispatch, registration};
+use crate::{ctx, registration};
 
 /// Best-effort lookup of `obj.getClass().getName()` for diagnostic logging.
 ///
@@ -47,31 +47,36 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
         &mut self,
         handler: impl for<'b, 'l> Fn(&mut Api<'b, 'l>, &E::Wrapper<'l>) + Send + Sync + 'static,
     ) -> jni::errors::Result<()> {
-        let id = dispatch::next_handler_id();
-        dispatch::insert_event_handler(
-            id,
-            Box::new(move |env, obj| match E::wrap(env, obj) {
-                Ok(wrapper) => {
-                    let mut api = Api::new(env);
-                    handler(&mut api, wrapper);
-                }
-                Err(jni::errors::Error::WrongObjectType) => {
-                    // Bukkit subclasses that don't declare their own static HandlerList share the
-                    // parent class's list, so fires of sibling/parent events get routed here.
-                    tracing::debug!(
-                        "event skipped: expected {:?}, actual {}",
-                        E::CLASS_NAME.as_cstr(),
-                        actual_class_name(env, obj),
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "event dispatch type-check failed for {:?}: {e}",
-                        E::CLASS_NAME
-                    );
-                }
-            }),
-        );
+        let id = ctx::with_ctx(|c| {
+            let id = c.next_handler_id();
+            c.event_handlers.insert(
+                id,
+                Box::new(move |env, obj| match E::wrap(env, obj) {
+                    Ok(wrapper) => {
+                        let mut api = Api::new(env);
+                        handler(&mut api, wrapper);
+                    }
+                    Err(jni::errors::Error::WrongObjectType) => {
+                        // Bukkit subclasses that don't declare their own static HandlerList share
+                        // the parent class's list, so fires of sibling/parent events get routed
+                        // here.
+                        tracing::debug!(
+                            "event skipped: expected {:?}, actual {}",
+                            E::CLASS_NAME.as_cstr(),
+                            actual_class_name(env, obj),
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "event dispatch type-check failed for {:?}: {e}",
+                            E::CLASS_NAME
+                        );
+                    }
+                }),
+            );
+            id
+        })
+        .expect("Ctx installed during core_init");
         registration::subscribe_event(self.env, self.plugin, E::CLASS_NAME, id)
     }
 
@@ -89,22 +94,26 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
         + Sync
         + 'static,
     ) -> jni::errors::Result<()> {
-        let id = dispatch::next_handler_id();
-        dispatch::insert_command_handler(
-            id,
-            Box::new(move |env, sender_obj, args| {
-                match CommandSenderInst::wrap_ref(env, sender_obj) {
-                    Ok(sender) => {
-                        let mut api = Api::new(env);
-                        handler(&mut api, sender, args)
+        let id = ctx::with_ctx(|c| {
+            let id = c.next_handler_id();
+            c.command_handlers.insert(
+                id,
+                Box::new(move |env, sender_obj, args| {
+                    match CommandSenderInst::wrap_ref(env, sender_obj) {
+                        Ok(sender) => {
+                            let mut api = Api::new(env);
+                            handler(&mut api, sender, args)
+                        }
+                        Err(e) => {
+                            tracing::warn!("command dispatch type-check failed: {e}");
+                            false
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("command dispatch type-check failed: {e}");
-                        false
-                    }
-                }
-            }),
-        );
+                }),
+            );
+            id
+        })
+        .expect("Ctx installed during core_init");
         registration::register_command(self.env, self.plugin, name, id)
     }
 }

@@ -1,21 +1,39 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
+
+use crate::dispatch::{CommandHandler, EventHandler};
 
 /// Reload-scoped state for a Paper plugin.
 ///
 /// [`Ctx`] is the single consolidated home for state that needs to outlive an individual JNI
 /// dispatch call but not survive a `/reload`. Born in `core_init`, dropped in `core_shutdown`.
 ///
-/// The storage is a single `static CTX: Mutex<Option<Ctx>>` in this module. Stage 1 leaves `Ctx`
-/// empty; subsequent stages migrate the existing scattered `Mutex<Option<HashMap<...>>>` statics
-/// (handler maps, callback registry, plugin Global ref, registered commands, MiniMessage singleton)
-/// into `Ctx` fields one at a time.
+/// The Ctx is stored in a global static, but its lifetime is scoped by the plugin initialization
+/// and shutdown.
 ///
 /// User plugin code does not see `Ctx` directly; access is through `crate::Api` helpers.
-pub(crate) struct Ctx {}
+pub(crate) struct Ctx {
+    pub(crate) event_handlers: HashMap<i64, EventHandler>,
+    pub(crate) command_handlers: HashMap<i64, CommandHandler>,
+    next_handler_id: i64,
+}
 
 impl Ctx {
     pub(crate) fn new() -> Self {
-        Self {}
+        Self {
+            event_handlers: HashMap::new(),
+            command_handlers: HashMap::new(),
+            next_handler_id: 1,
+        }
+    }
+
+    /// Allocate a fresh handler id.
+    ///
+    /// Ids are unique within a single plugin load; reset to 1 on each plugin reload.
+    pub(crate) fn next_handler_id(&mut self) -> i64 {
+        let id = self.next_handler_id;
+        self.next_handler_id += 1;
+        id
     }
 }
 
