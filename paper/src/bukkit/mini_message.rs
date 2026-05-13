@@ -1,31 +1,26 @@
-use std::sync::Mutex;
-
 use jni::objects::{JObject, JValue};
-use jni::refs::Global;
 use jni::{Env, jni_sig, jni_str};
 
-/// Cached `MiniMessage` singleton.
-///
-/// Lazy-initialized on first use; cleared on `core_shutdown` so the JVM-side ref drops before
-/// disco-core's .so unloads.
-static MINI_MESSAGE: Mutex<Option<Global<JObject<'static>>>> = Mutex::new(None);
+use crate::ctx;
 
 /// Get (or lazily fetch) a local reference to the MiniMessage singleton for this JNI frame.
 fn instance<'local>(env: &mut Env<'local>) -> jni::errors::Result<JObject<'local>> {
-    let mut guard = MINI_MESSAGE.lock().unwrap();
-    if guard.is_none() {
-        let inst = env
-            .call_static_method(
-                jni_str!("net/kyori/adventure/text/minimessage/MiniMessage"),
-                jni_str!("miniMessage"),
-                jni_sig!("()Lnet/kyori/adventure/text/minimessage/MiniMessage;"),
-                &[],
-            )?
-            .l()?;
-        *guard = Some(env.new_global_ref(&inst)?);
-    }
-    let global = guard.as_ref().unwrap();
-    env.new_local_ref(global)
+    ctx::with_ctx(|c| -> jni::errors::Result<JObject<'local>> {
+        if c.mini_message.is_none() {
+            let inst = env
+                .call_static_method(
+                    jni_str!("net/kyori/adventure/text/minimessage/MiniMessage"),
+                    jni_str!("miniMessage"),
+                    jni_sig!("()Lnet/kyori/adventure/text/minimessage/MiniMessage;"),
+                    &[],
+                )?
+                .l()?;
+            c.mini_message = Some(env.new_global_ref(&inst)?);
+        }
+        let global = c.mini_message.as_ref().unwrap();
+        env.new_local_ref(global)
+    })
+    .expect("Ctx installed during core_init")
 }
 
 /// Parse `text` as MiniMessage and return the resulting Adventure `Component` JNI ref.
@@ -44,11 +39,4 @@ pub(crate) fn deserialize<'local>(
         &[JValue::Object(&jstr)],
     )?
     .l()
-}
-
-/// Drop the cached MiniMessage global ref.
-///
-/// Called from `core_shutdown` so the JNI ref is released before disco-core's .so unloads.
-pub(crate) fn shutdown() {
-    *MINI_MESSAGE.lock().unwrap() = None;
 }

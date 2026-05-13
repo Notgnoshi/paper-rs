@@ -26,9 +26,8 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
             warn!("unregister_commands failed: {e}");
             env.exception_clear();
         }
-        crate::bukkit::mini_message::shutdown();
         logger::shutdown_logger();
-        // Drops handler maps along with any captured user state.
+        // Drops any static state initialized during plugin runtime along with any captured JNI globals.
         ctx::uninstall();
         Ok(())
     });

@@ -27,6 +27,9 @@ pub(crate) struct Ctx {
     pub(crate) event_handlers: HashMap<i64, EventHandler>,
     pub(crate) command_handlers: HashMap<i64, CommandHandler>,
     pub(crate) callbacks: HashMap<i64, BiConsumerFn>,
+    /// Cached `MiniMessage` singleton. Lazy-initialized on first use, since not every plugin
+    /// touches MiniMessage.
+    pub(crate) mini_message: Option<Global<JObject<'static>>>,
     next_handler_id: i64,
     next_callback_id: i64,
 }
@@ -39,6 +42,7 @@ impl Ctx {
             event_handlers: HashMap::new(),
             command_handlers: HashMap::new(),
             callbacks: HashMap::new(),
+            mini_message: None,
             next_handler_id: 1,
             next_callback_id: 1,
         }
