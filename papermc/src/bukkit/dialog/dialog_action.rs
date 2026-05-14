@@ -55,10 +55,9 @@ impl<'local> DialogAction<'local> {
         F: for<'a> Fn(&mut Api<'_, 'a>, &JObject<'a>, &JObject<'a>) + Send + Sync + 'static,
     {
         let env = api.jni();
-        let id = ctx::with_ctx(|c| {
-            let id = c.next_callback_id();
+        let id = ctx::next_id();
+        ctx::with_ctx(|c| {
             c.callbacks.insert(id, Arc::new(callback));
-            id
         })
         .expect("Ctx installed during plugin_init");
 

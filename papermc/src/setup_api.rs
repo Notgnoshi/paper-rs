@@ -64,8 +64,8 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
         &mut self,
         handler: for<'b, 'l> fn(&mut P, &mut Api<'b, 'l>, &E::Wrapper<'l>),
     ) -> eyre::Result<()> {
-        let id = ctx::with_ctx(|c| {
-            let id = c.next_handler_id();
+        let id = ctx::next_id();
+        ctx::with_ctx(|c| {
             c.event_handlers.insert(
                 id,
                 Arc::new(move |env, obj| match E::wrap(env, obj) {
@@ -90,7 +90,6 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
                     }
                 }),
             );
-            id
         })
         .expect("Ctx installed during plugin_init");
         registration::subscribe_event(self.api.jni(), E::CLASS_NAME, id)?;
@@ -108,8 +107,8 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
             &[String],
         ) -> bool,
     ) -> eyre::Result<()> {
-        let id = ctx::with_ctx(|c| {
-            let id = c.next_handler_id();
+        let id = ctx::next_id();
+        ctx::with_ctx(|c| {
             c.command_handlers.insert(
                 id,
                 Arc::new(move |env, sender_obj, args| {
@@ -126,7 +125,6 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
                     }
                 }),
             );
-            id
         })
         .expect("Ctx installed during plugin_init");
         registration::register_command(self.api.jni(), name, id)?;

@@ -2,6 +2,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use jni::Env;
 use jni::objects::{JClass, JObject};
@@ -49,8 +50,6 @@ pub(crate) struct Ctx {
     /// papermc doesn't need a generic parameter for the plugin type
     pub(crate) rust_plugin: Option<Box<dyn Any + Send>>,
     pub(crate) on_disable_fn: Option<OnDisableFn>,
-    next_handler_id: i64,
-    next_callback_id: i64,
 }
 
 impl Ctx {
@@ -65,28 +64,23 @@ impl Ctx {
             jni_cache: HashMap::new(),
             rust_plugin: None,
             on_disable_fn: None,
-            next_handler_id: 1,
-            next_callback_id: 1,
         }
     }
+}
 
-    /// Allocate a fresh handler id.
-    ///
-    /// Ids are unique within a single plugin load; reset to 1 on each plugin reload.
-    pub(crate) fn next_handler_id(&mut self) -> i64 {
-        let id = self.next_handler_id;
-        self.next_handler_id += 1;
-        id
-    }
+/// Monotonic id counter shared by every handler and callback this cdylib hands out to Java.
+///
+/// Lives outside `Ctx` so ids never collide across `/reload`: a stale `RustDialogActionCallback`
+/// Cleaner from the previous load can fire `drop_callback(staleId)` against the new load without
+/// evicting a live callback that happened to be issued the same id.
+static NEXT_ID: AtomicI64 = AtomicI64::new(1);
 
-    /// Allocate a fresh callback id for a Java functional-interface bridge.
-    ///
-    /// Ids are unique within a single plugin load; reset to 1 on each plugin reload.
-    pub(crate) fn next_callback_id(&mut self) -> i64 {
-        let id = self.next_callback_id;
-        self.next_callback_id += 1;
-        id
-    }
+/// Allocate a fresh id for an event handler, command handler, or Java functional-interface bridge.
+///
+/// Ids are unique for the lifetime of this cdylib (i.e., until the .so is unloaded), which
+/// outlives any single `/reload`.
+pub(crate) fn next_id() -> i64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Singleton Ctx storage.
