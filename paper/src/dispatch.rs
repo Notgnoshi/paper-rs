@@ -1,64 +1,31 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 
+use jni::Env;
 use jni::objects::{JObject, JObjectArray, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jlong, jobject, jobjectArray};
-use jni::{Env, EnvUnowned};
 use tracing::warn;
 
-pub(crate) type EventHandler = Box<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>) + Send + Sync>;
+use crate::{ctx, ffi};
+
+pub(crate) type EventHandler = Arc<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>) + Send + Sync>;
 pub(crate) type CommandHandler =
-    Box<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>, &[String]) -> bool + Send + Sync>;
-
-static EVENT_HANDLERS: Mutex<Option<HashMap<i64, EventHandler>>> = Mutex::new(None);
-static COMMAND_HANDLERS: Mutex<Option<HashMap<i64, CommandHandler>>> = Mutex::new(None);
-static NEXT_HANDLER_ID: AtomicI64 = AtomicI64::new(1);
-
-pub(crate) fn next_handler_id() -> i64 {
-    NEXT_HANDLER_ID.fetch_add(1, Ordering::SeqCst)
-}
-
-pub(crate) fn insert_event_handler(id: i64, handler: EventHandler) {
-    let mut guard = EVENT_HANDLERS.lock().unwrap();
-    guard.get_or_insert_with(HashMap::new).insert(id, handler);
-}
-
-pub(crate) fn insert_command_handler(id: i64, handler: CommandHandler) {
-    let mut guard = COMMAND_HANDLERS.lock().unwrap();
-    guard.get_or_insert_with(HashMap::new).insert(id, handler);
-}
-
-/// Drop both handler maps.
-///
-/// Called from `core_shutdown` so closures (and any captured state) get freed while the .so is
-/// still mapped.
-pub(crate) fn clear_handlers() {
-    *EVENT_HANDLERS.lock().unwrap() = None;
-    *COMMAND_HANDLERS.lock().unwrap() = None;
-}
+    Arc<dyn for<'a> Fn(&mut Env<'a>, &JObject<'a>, &[String]) -> bool + Send + Sync>;
 
 pub(crate) unsafe extern "C" fn dispatch_event(
     env: *mut jni::sys::JNIEnv,
     handler_id: jlong,
     event: jobject,
 ) {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let _ = unowned
-        .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            let map_guard = EVENT_HANDLERS.lock().unwrap();
-            let Some(map) = map_guard.as_ref() else {
-                return Ok(());
-            };
-            let Some(handler) = map.get(&handler_id) else {
-                warn!("no event handler registered for id {handler_id}");
-                return Ok(());
-            };
-            let event_obj = unsafe { JObject::from_raw(env, event) };
-            handler(env, &event_obj);
-            Ok(())
-        })
-        .into_outcome();
+    let _ = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        let event_obj = unsafe { JObject::from_raw(env, event) };
+        let handler = ctx::with_ctx(|c| c.event_handlers.get(&handler_id).cloned()).flatten();
+        let Some(handler) = handler else {
+            warn!("no event handler registered for id {handler_id}");
+            return Ok(());
+        };
+        handler(env, &event_obj);
+        Ok(())
+    });
 }
 
 pub(crate) unsafe extern "C" fn dispatch_command(
@@ -67,31 +34,21 @@ pub(crate) unsafe extern "C" fn dispatch_command(
     sender: jobject,
     args: jobjectArray,
 ) -> jboolean {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<bool> {
-        let map_guard = COMMAND_HANDLERS.lock().unwrap();
-        let Some(map) = map_guard.as_ref() else {
-            return Ok(false);
-        };
-        let Some(handler) = map.get(&handler_id) else {
-            warn!("no command handler registered for id {handler_id}");
-            return Ok(false);
-        };
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<bool> {
         let sender_obj = unsafe { JObject::from_raw(env, sender) };
         let args_arr = unsafe { JObjectArray::<JString>::from_raw(env, args) };
         let args_vec = read_string_array(env, &args_arr)?;
-        let result = handler(env, &sender_obj, &args_vec);
-        Ok(result)
+        let handler = ctx::with_ctx(|c| c.command_handlers.get(&handler_id).cloned()).flatten();
+        let Some(handler) = handler else {
+            warn!("no command handler registered for id {handler_id}");
+            return Ok(false);
+        };
+        Ok(handler(env, &sender_obj, &args_vec))
     });
-    match outcome.into_outcome() {
-        jni::Outcome::Ok(b) => {
-            if b {
-                JNI_TRUE
-            } else {
-                JNI_FALSE
-            }
-        }
-        _ => JNI_FALSE,
+    match result {
+        Ok(true) => JNI_TRUE,
+        Ok(false) => JNI_FALSE,
+        Err(_) => JNI_FALSE,
     }
 }
 
@@ -109,11 +66,16 @@ fn read_string_array(
     arr: &JObjectArray<'_, JString>,
 ) -> jni::errors::Result<Vec<String>> {
     let len = arr.len(env)?;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        let elem = arr.get_element(env, i)?;
-        let s = elem.try_to_string(env)?;
-        out.push(s);
-    }
-    Ok(out)
+    // Each `get_element` allocates a local JNI ref. JNI guarantees only 16 locals by default, so a
+    // long argument list overflows the outer frame's allotment. Push a sized sub-frame so those
+    // intermediates are released en masse when this helper returns
+    env.with_local_frame(len + 4, |env| -> jni::errors::Result<Vec<String>> {
+        let mut out = Vec::with_capacity(len);
+        for i in 0..len {
+            let elem = arr.get_element(env, i)?;
+            let s = elem.try_to_string(env)?;
+            out.push(s);
+        }
+        Ok(out)
+    })
 }

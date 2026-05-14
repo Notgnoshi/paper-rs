@@ -1,8 +1,7 @@
 use jni::objects::{JObject, JValue};
-use jni::strings::JNIStr;
 use jni::{jni_sig, jni_str};
 
-use super::IsEntity;
+use super::Entity;
 use crate::api::Api;
 use crate::bukkit::DyeColor;
 
@@ -11,8 +10,8 @@ pub struct Sheep<'local> {
     obj: JObject<'local>,
 }
 
-impl<'local> IsEntity<'local> for Sheep<'local> {
-    const CLASS_NAME: &'static JNIStr = jni_str!("org/bukkit/entity/Sheep");
+impl<'local> Entity<'local> for Sheep<'local> {
+    const CLASS_NAME: &'static str = "org/bukkit/entity/Sheep";
 
     unsafe fn from_obj(obj: JObject<'local>) -> Self {
         Self { obj }
@@ -20,7 +19,7 @@ impl<'local> IsEntity<'local> for Sheep<'local> {
 }
 
 impl<'local> Sheep<'local> {
-    pub fn set_color(&mut self, api: &mut Api, color: DyeColor) -> jni::errors::Result<()> {
+    pub fn set_color(&mut self, api: &mut Api, color: DyeColor) -> eyre::Result<()> {
         let env = api.jni();
         let dye = color.as_java(env)?;
         env.call_method(

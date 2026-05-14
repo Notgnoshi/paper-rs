@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
+use jni::Env;
 use jni::objects::JObject;
-use jni::{Env, EnvUnowned};
 use tracing::warn;
 
 use crate::builder::PluginBuilder;
-use crate::{CORE_ABI_VERSION, CoreApi, dispatch, logger, registration};
+use crate::{CORE_ABI_VERSION, CoreApi, callbacks, ctx, dispatch, ffi, registration};
 
 /// The static CoreApi table returned by every `paper_core_init` call.
 static CORE_API: CoreApi = CoreApi {
@@ -15,30 +15,27 @@ static CORE_API: CoreApi = CoreApi {
     dispatch_event: dispatch::dispatch_event,
     dispatch_command: dispatch::dispatch_command,
     dispatch_tab_complete: dispatch::dispatch_tab_complete,
+    dispatch_bi_consumer: callbacks::dispatch_bi_consumer,
+    drop_callback: callbacks::drop_callback,
 };
 
 unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let outcome = unowned.with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
         if let Err(e) = registration::unregister_commands(env) {
             warn!("unregister_commands failed: {e}");
             env.exception_clear();
         }
-        dispatch::clear_handlers();
-        crate::bukkit::mini_message::shutdown();
-        logger::shutdown_logger();
+        if let Err(e) = registration::unregister_all_listeners(env) {
+            warn!("unregister_all_listeners failed: {e}");
+            env.exception_clear();
+        }
+        // Drops any static state initialized during plugin runtime along with any captured JNI globals.
+        ctx::uninstall();
         Ok(())
     });
-    match outcome.into_outcome() {
-        jni::Outcome::Ok(_) => 0,
-        jni::Outcome::Err(e) => {
-            warn!("core_shutdown failed: {e}");
-            1
-        }
-        jni::Outcome::Panic(_) => {
-            warn!("core_shutdown panicked");
-            2
-        }
+    match result {
+        Ok(()) => 0,
+        Err(_) => 1,
     }
 }
 
@@ -46,23 +43,36 @@ unsafe extern "C" fn core_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
 ///
 /// Builds a `PluginBuilder`, runs the user's `build` closure to register handlers, and returns the
 /// static `CoreApi` table the loader will dispatch through.
+///
+/// Returns a null pointer if the build closure returned `Err`. paper-loader maps a null return to a
+/// Java `RuntimeException`, aborting plugin init cleanly with the underlying exception surfaced via
+/// Bukkit's normal error path.
+//
+// `core_init` is invoked from a plugin's C-ABI `paper_core_init` symbol with raw pointers handed
+// to it by the JVM. JNI's calling convention is the contract for those pointers being valid; null
+// is null-checked inside [`ffi::bridge`]. Keeping this function safe at the Rust level lets plugin
+// authors write `paper::core_init(env, plugin, ...)` without an unsafe wrapper at every call site.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn core_init<F>(
     env: *mut jni::sys::JNIEnv,
     plugin: jni::sys::jobject,
     build: F,
 ) -> *const CoreApi
 where
-    F: FnOnce(&mut PluginBuilder<'_, '_>),
+    F: FnOnce(&mut PluginBuilder<'_, '_>) -> eyre::Result<()>,
 {
-    let mut unowned = unsafe { EnvUnowned::from_raw(env) };
-    let _ = unowned
-        .with_env(|env: &mut Env<'_>| -> jni::errors::Result<()> {
-            logger::install_logger(env)?;
-            let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
-            let mut builder = PluginBuilder::new(env, &plugin_obj);
-            build(&mut builder);
-            Ok(())
-        })
-        .into_outcome();
-    &CORE_API
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
+        let plugin_global = env.new_global_ref(&plugin_obj)?;
+        if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
+            eyre::bail!("paper_core_init: Ctx already initialized (prior shutdown missing)");
+        }
+        let mut builder = PluginBuilder::new(env);
+        build(&mut builder)?;
+        Ok(())
+    });
+    match result {
+        Ok(()) => &CORE_API,
+        Err(_) => std::ptr::null(),
+    }
 }
