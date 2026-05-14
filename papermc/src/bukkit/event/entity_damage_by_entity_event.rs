@@ -3,7 +3,7 @@ use jni::{jni_sig, jni_str};
 
 use super::Event;
 use crate::api::Api;
-use crate::bukkit::{Entity, EntityInst, Player};
+use crate::bukkit::{EntityInst, Player};
 use crate::jobject_repr::JObjectRepr;
 
 /// Marker type. Used in `SetupApi::register_event`
@@ -72,7 +72,7 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         // Direct player damage: punch, sword, etc.
         if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &player_class)? {
             // SAFETY: verified instanceof Player.
-            return Ok(Some(unsafe { <Player as Entity>::from_obj(damager.obj) }));
+            return Ok(Some(unsafe { Player::from_jobject(damager.obj) }));
         }
 
         // Projectile damage: arrow, thrown potion, trident, etc. Check the shooter.
@@ -90,7 +90,7 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
             // JNI's IsInstanceOf returns TRUE for null, so null-check first.
             if !shooter_obj.is_null() && env.is_instance_of(&shooter_obj, &player_class)? {
                 // SAFETY: verified non-null and instanceof Player.
-                return Ok(Some(unsafe { <Player as Entity>::from_obj(shooter_obj) }));
+                return Ok(Some(unsafe { Player::from_jobject(shooter_obj) }));
             }
         }
 

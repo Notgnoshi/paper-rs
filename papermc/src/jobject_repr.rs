@@ -1,32 +1,45 @@
 use jni::objects::JObject;
 
-/// Marker trait for wrapper types that are layout-compatible with `JObject<'local>` and may
-/// therefore be borrowed-cast from a `&JObject<'local>`.
-///
-/// Several dispatch sites in papermc hold a `&JObject<'local>` (the raw event/sender/etc. handed to a
-/// JNI trampoline) and need to hand the user code a `&FooRef<'local>` instead -- a wrapper that
-/// exposes typed accessors. The conversion is a pointer reinterpret; for that to be sound,
-/// `FooRef<'local>` must be `#[repr(transparent)]` over `JObject<'local>`.
-///
-/// Historically this invariant lived only in `SAFETY:` comments on the cast sites. So now we have a
-/// marker trait to formalize it a bit.
-///
 /// # Safety
 ///
-/// Use a `#[repr(transparent)]` ZST to wrap the JObject.
+/// Implementor must be a `#[repr(transparent)]` wrapper over `JObject<'local>`. The trait's default
+/// methods rely on this for sound pointer reinterpretation.
+///
+/// A manual `Drop` impl on the wrapper must not do anything beyond what `JObject<'local>`'s `Drop`
+/// already does; otherwise [`JObjectRepr::from_jobject`] will not double-drop but will silently
+/// substitute the wrapper's drop for the JObject's.
 pub unsafe trait JObjectRepr<'local>: Sized {
     const _LAYOUT_CHECK: () = assert!(
         std::mem::size_of::<Self>() == std::mem::size_of::<JObject<'local>>(),
         "JObjectRepr implementor is not the size of JObject<'local>; missing #[repr(transparent)]?",
     );
 
-    /// Reinterpret a borrowed `&JObject<'local>` as a borrowed `&Self`.
     fn from_jobject_ref<'a>(obj: &'a JObject<'local>) -> &'a Self {
-        // the const _: () = assert!() trick is lazily evaluated for associated trait constants, so
-        // you have to refer to the const in an impl to get it to trigger eagerly.
-        #[allow(clippy::let_unit_value)]
         let _ = Self::_LAYOUT_CHECK;
-
         unsafe { &*(obj as *const JObject<'local> as *const Self) }
     }
+
+    /// # Safety
+    ///
+    /// `obj` must be a JNI ref to a Java instance of the wrapped class.
+    unsafe fn from_jobject(obj: JObject<'local>) -> Self {
+        let _ = Self::_LAYOUT_CHECK;
+        let obj = std::mem::ManuallyDrop::new(obj);
+        unsafe { std::ptr::read(&*obj as *const JObject<'local> as *const Self) }
+    }
+
+    fn as_jobject(&self) -> &JObject<'local> {
+        let _ = Self::_LAYOUT_CHECK;
+        unsafe { &*(self as *const Self as *const JObject<'local>) }
+    }
+}
+
+/// Identifies a wrapper type as a valid target for `is_instance_of`-based narrowing.
+///
+/// # Safety
+///
+/// `CLASS_NAME` must be the JVM descriptor of the exact Java class the wrapper represents (e.g.
+/// `"org/bukkit/entity/Player"`).
+pub unsafe trait JClassCast<'local>: JObjectRepr<'local> {
+    const CLASS_NAME: &'static str;
 }
