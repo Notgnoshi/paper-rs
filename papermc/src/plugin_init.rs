@@ -7,7 +7,7 @@ use tracing::warn;
 use crate::api::Api;
 use crate::plugin::Plugin;
 use crate::setup_api::SetupApi;
-use crate::{FnTable, PLUGIN_ABI_VERSION, callbacks, ctx, dispatch, ffi, registration};
+use crate::{FnTable, PLUGIN_ABI_VERSION, callbacks, ctx, dispatch, ffi, logger, registration};
 
 /// The static `FnTable` returned by every `papermc_plugin_init` call.
 static FN_TABLE: FnTable = FnTable {
@@ -48,6 +48,9 @@ unsafe extern "C" fn plugin_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
         }
         // Drops any static state initialized during plugin runtime along with any captured JNI globals.
         ctx::uninstall();
+        // Release the dispatcher-class Global this cdylib was holding. Tracing events emitted from
+        // this cdylib between here and the next `init` no-op silently.
+        logger::unbind_dispatcher();
         Ok(())
     });
     match result {
@@ -81,6 +84,13 @@ unsafe extern "C" fn plugin_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn init<P: Plugin>(env: *mut jni::sys::JNIEnv, plugin: jni::sys::jobject) -> *const FnTable {
     let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        // Install this cdylib's tracing subscriber and bind the dispatcher class, so plugin-side
+        // `tracing::*` events reach Java. The install is `Once`-guarded; `bind_dispatcher` runs
+        // every enable so the cached class doesn't pin a stale ClassLoader after `/reload`.
+        logger::install_subscriber(env.get_java_vm()?);
+        if let Err(e) = logger::bind_dispatcher(env) {
+            eprintln!("papermc::init: bind_dispatcher failed: {e}");
+        }
         let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
         let plugin_global = env.new_global_ref(&plugin_obj)?;
         if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {

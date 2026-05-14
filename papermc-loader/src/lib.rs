@@ -2,19 +2,29 @@
 //!
 //! Java can't unload a native library once it's been dlopened, so we load a stable plugin loader,
 //! and then dlopen the actual plugin here, so that we can close it and reload it on demand.
-use std::ffi::OsStr;
+use std::ffi::{OsStr, c_void};
 use std::mem::size_of;
 use std::sync::Arc;
 
 use arc_swap::ArcSwapOption;
 use jni::errors::{Error, ThrowRuntimeExAndDefault};
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{JNI_FALSE, jboolean, jlong, jobject, jobjectArray};
-use jni::{Env, EnvUnowned};
+use jni::sys::{
+    JNI_FALSE, JNI_VERSION_1_8, JavaVM as RawJavaVM, jboolean, jint, jlong, jobject, jobjectArray,
+};
+use jni::{Env, EnvUnowned, JavaVM};
 use libloading::{Library, Symbol};
-use papermc::{FnTable, PLUGIN_ABI_VERSION};
+use papermc::{FnTable, PLUGIN_ABI_VERSION, logger};
 
-mod logger;
+/// JVM hook fired once when papermc-loader.so is loaded via `System.loadLibrary`. Installs
+/// papermc-loader's tracing subscriber so loader-side `tracing::*` events reach Java; the
+/// per-plugin cdylib installs its own subscriber separately from `papermc::init`.
+#[unsafe(no_mangle)]
+pub extern "system" fn JNI_OnLoad(vm: *mut RawJavaVM, _reserved: *mut c_void) -> jint {
+    let javavm = unsafe { JavaVM::from_raw(vm) };
+    logger::install_subscriber(javavm);
+    JNI_VERSION_1_8
+}
 
 /// A loaded plugin: the `dlopen`-managed library and the function-pointer table it exported
 /// at `papermc_plugin_init` time.
@@ -96,11 +106,10 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1enable<'local>(
 ) {
     unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
-            // Wire the tracing subscriber up first; any tracing below this point reaches Java.
-            // Earlier events (before this line) would land in /dev/null since the subscriber
-            // isn't installed yet, so there's nothing to log here.
-            if let Err(e) = logger::install(env) {
-                eprintln!("papermc-loader: logger install failed: {e}");
+            // Refresh the dispatcher-class binding so the cached Global picks up the fresh
+            // ClassLoader from this enable cycle.
+            if let Err(e) = logger::bind_dispatcher(env) {
+                eprintln!("papermc-loader: bind_dispatcher failed: {e}");
             }
             tracing::debug!("papermc-loader: init entered");
             let path = plugin_path.try_to_string(env)?;
@@ -149,8 +158,8 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1disable<'local>(
                 tracing::warn!("papermc-loader: no plugin to shutdown");
             }
             // Drop the dispatcher class Global so the unloading plugin's ClassLoader can be GC'd.
-            // Tracing events between here and the next install will no-op silently.
-            logger::shutdown();
+            // Tracing events between here and the next bind will no-op silently.
+            logger::unbind_dispatcher();
             Ok(())
         })
         .into_outcome();

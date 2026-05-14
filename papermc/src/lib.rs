@@ -8,6 +8,7 @@ pub(crate) mod ctx;
 mod dispatch;
 pub(crate) mod ffi;
 pub mod jobject_repr;
+pub mod logger;
 mod plugin;
 mod plugin_init;
 mod registration;

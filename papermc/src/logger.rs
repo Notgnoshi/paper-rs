@@ -1,9 +1,11 @@
 //! Bridges Rust `tracing` events into the JVM's Java logger via a static dispatcher class.
 //!
-//! The subscriber lives here in papermc-loader rather than in a core plugin because papermc-loader's
-//! .so is never unloaded; a subscriber whose `JniLayer` code lives in a `dlclose`-able .so would
-//! become unmapped on `/reload` and crash on the next tracing event. Keeping it here makes the
-//! subscriber a one-time, process-lifetime install.
+//! The logger functions are called from every cdylib that links papermc: papermc-loader installs
+//! its own subscriber from `JNI_OnLoad`, and each plugin cdylib installs its own from
+//! [`crate::init`]. Each cdylib has its own copy of `tracing-core`'s `GLOBAL_DISPATCH` (because
+//! `tracing-core` is an rlib statically linked into every cdylib), so each cdylib needs its own
+//! subscriber install for its events to reach Java. The Layer itself is a ZST that just consults
+//! the cdylib-local `JVM` and `DISPATCHER_CLASS` statics, so the install is cheap.
 //!
 //! The dispatcher class (`io.papermc.RustTracingSubscriber`) must expose a static
 //! `dispatch(int level, String target, String message)` method. Level mapping: 0=ERROR, 1=WARN,
@@ -22,47 +24,50 @@ use tracing_subscriber::layer::Context;
 /// and keep it.
 static JVM: Mutex<Option<JavaVM>> = Mutex::new(None);
 
-/// Global ref to the dispatcher class. Refreshed on every `install` so the cached `Global`
-/// doesn't pin a stale `ClassLoader` from a previous load.
+/// Global ref to the dispatcher class. Refreshed on every `bind_dispatcher` so the cached
+/// `Global` doesn't pin a stale `ClassLoader` from a previous load.
 static DISPATCHER_CLASS: Mutex<Option<Global<JClass<'static>>>> = Mutex::new(None);
 
-/// Tracks the one-shot subscriber installation. `tracing` only honors a single global default,
-/// and `try_init` after the first call is a silent no-op; using `Once` makes the contract
-/// explicit and avoids rebuilding the filter on every plugin load.
+/// Tracks the one-shot subscriber installation. `tracing` only honors a single global default
+/// per cdylib, and `try_init` after the first call is a silent no-op; using `Once` makes the
+/// contract explicit and avoids rebuilding the filter on repeated calls.
 static SUBSCRIBER_INIT: Once = Once::new();
 
-/// Install (or refresh) the JNI logger bridge.
+/// Install this cdylib's tracing subscriber and cache the `JavaVM` it will use to attach threads at
+/// emit time. Idempotent: subsequent calls within the same cdylib are no-ops.
 ///
-/// First call: caches the JVM, acquires a `Global<JClass>` for the dispatcher, and installs the
-/// process-global tracing subscriber. Subsequent calls (on each `/reload`) replace the dispatcher
-/// `Global` with a fresh one - the previous one's `Drop` releases its pin on the prior
-/// `ClassLoader`, so it can be GC'd along with the unloaded plugin.
-///
-/// Returns `Err` if any JNI lookup fails; the caller may treat this as best-effort and continue
-/// (tracing events just no-op until a subsequent install succeeds).
-pub(crate) fn install(env: &mut Env) -> jni::errors::Result<()> {
+/// Called once from papermc-loader's `JNI_OnLoad` (so loader-side `tracing::*` events reach Java),
+/// and once from [`crate::init`] (so plugin-side events reach Java).
+pub fn install_subscriber(jvm: JavaVM) {
     {
-        let mut jvm = JVM.lock().unwrap();
-        if jvm.is_none() {
-            *jvm = Some(env.get_java_vm()?);
+        let mut guard = JVM.lock().unwrap();
+        if guard.is_none() {
+            *guard = Some(jvm);
         }
     }
+    SUBSCRIBER_INIT.call_once(install_layer);
+}
+
+/// Cache a fresh `Global<JClass>` for the dispatcher class so the JNI layer can call
+/// `RustTracingSubscriber.dispatch(...)` without a per-event `FindClass`.
+///
+/// Called on every plugin enable so the cached class isn't pinning a stale ClassLoader after
+/// `/reload`. The previous `Global`'s `Drop` releases its ref on the prior ClassLoader.
+pub fn bind_dispatcher(env: &mut Env) -> jni::errors::Result<()> {
     let class = env.find_class(jni_str!("io/papermc/RustTracingSubscriber"))?;
     let class_global = env.new_global_ref(class)?;
     *DISPATCHER_CLASS.lock().unwrap() = Some(class_global);
-
-    SUBSCRIBER_INIT.call_once(install_subscriber);
     Ok(())
 }
 
 /// Drop the cached dispatcher-class `Global` so its `ClassLoader` can be GC'd on `/reload`.
-/// The cached `JavaVM` and the installed subscriber stay live for the process lifetime; tracing
-/// events between `shutdown` and the next `install` are silently dropped.
-pub(crate) fn shutdown() {
+///
+/// Tracing events between `unbind_dispatcher` and the next `bind_dispatcher` are silently dropped.
+pub fn unbind_dispatcher() {
     *DISPATCHER_CLASS.lock().unwrap() = None;
 }
 
-fn install_subscriber() {
+fn install_layer() {
     use tracing_subscriber::EnvFilter;
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
