@@ -7,35 +7,38 @@ _minimal_ Java.
 * Makefile - main entrypoint for build. It handles the orchestration of Gradle (java) and Cargo
   (rust). Neither Gradle nor Cargo know about each other.
 
-* papermc-loader - Provides libpapermc_loader.so, which is what the DiscoPlugin loads via papermc's
-  NativeLoader. papermc-loader.so loads disco-core.so, which is where the implementation details of
-  the Rust side of the Disco plugin are. We do this so that the /reload command can work, since it's
-  not possible to reload a native DSO in Java?
+* papermc-loader - Provides libpapermc_loader.so, the stable native library that the
+  RustReloadablePlugin loads via papermc's NativeLoader. papermc-loader.so then dlopens the
+  plugin's own .so (e.g. libdisco_plugin.so), which is where the implementation details of the
+  Rust side of the plugin are. We do this so that the /reload command can work, since it's not
+  possible to reload a native DSO in Java?
 
-  Ideally, papermc-loader _never_ has to change when we add new functionality to the Disco plugin.
-  It's intended to be stable, so that we can run the server once, and /reload once we make
-  modifications.
+  Ideally, papermc-loader _never_ has to change when we add new functionality to a consumer
+  plugin. It's intended to be stable, so that we can run the server once, and /reload once we
+  make modifications.
 
-* disco-core - the Rust implementation of the Disco plugin's business logic. Provided through
-  libdisco_core.so
+* papermc - both the shared Rust / Java interface library AND the Java module that consumer
+  plugins depend on. The Rust crate (`Cargo.toml`, `src/lib.rs`, `src/bukkit/...`) is where the
+  JNI interfaces are wrapped. The Java sources (`src/main/java/io/papermc/*.java`) provide the
+  base `RustReloadablePlugin` JavaPlugin, the native-library loader, the tracing-subscriber
+  bridge, and the command/event executor bridges. The Rust crate and the Java module live in one
+  directory because they are two halves of a single logical component; Cargo and Gradle have
+  non-overlapping file conventions and coexist.
 
-  Ideally, new features are added here, provided sufficient APIs are provided by the papermc Rust
-  crate.
+  Eventually, this will grow to contain a Rust wrapper around the bukkit / paper Java plugin API.
+  As the bukkit / paper API surface is very large, it's extremely likely that new features will
+  require modifications to the papermc crate.
 
-* papermc - both the shared Rust / Java interface library AND the Java module that consumer plugins
-  depend on. The Rust crate (`Cargo.toml`, `src/lib.rs`, `src/bukkit/...`) is where the JNI
-  interfaces are wrapped. The Java sources (`src/main/java/io/papermc/*.java`) provide utilities for
-  building a Paper plugin in Rust: logging dispatcher, native loader, command/event bridges. The
-  Rust crate and the Java module live in one directory because they are two halves of a single
-  logical component; Cargo and Gradle have non-overlapping file conventions and coexist.
+  Ideally, the API provided by the papermc Rust crate mirrors the bukkit / paper plugin API so
+  that it's fairly natural to write Rust plugins. We'll have to consider modifications when we
+  come up against language limitations, but we should strive to mirror the Java APIs as much as
+  possible.
 
-  Eventually, this will grow to contain a Rust wrapper around the bukkit / paper Java plugin API. As
-  the bukkit / paper API surface is very large, it's extremely likely that new features will require
-  modifications to the papermc crate.
+* disco-plugin - the PoC consumer plugin. The Rust crate (`Cargo.toml`, `src/lib.rs`) implements
+  the `papermc::Plugin` trait and registers handlers via `SetupApi`. The Gradle config
+  (`build.gradle.kts`) packages a Bukkit plugin jar that bundles the papermc Java module and
+  declares `io.papermc.RustReloadablePlugin` as its `main:` in `src/main/resources/plugin.yml`.
+  Like papermc, the Rust crate and Gradle module share a directory.
 
-  Ideally, the API provided by the papermc Rust crate mirrors the bukkit / paper plugin API so that
-  it's fairly natural to write Rust plugins. We'll have to consider modifications when we come up
-  against language limitations, but we should strive to mirror the Java APIs as much as possible.
-
-* disco-plugin - this is the Java side of the disco-core plugin. It uses the papermc java library to
-  load the Rust implementation of the disco-core plugin.
+  Ideally, new features are added in the Rust side here, provided sufficient APIs are provided by
+  the papermc Rust crate.

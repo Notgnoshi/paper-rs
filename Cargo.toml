@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["disco-core", "papermc", "papermc-loader"]
+members = ["disco-plugin", "papermc", "papermc-loader"]
 
 [workspace.package]
 version = "0.0.1-rc0"

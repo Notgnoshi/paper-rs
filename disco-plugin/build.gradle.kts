@@ -27,15 +27,15 @@ dependencies {
 val loaderLib: String = (project.findProperty("loader-lib") as String?)
     ?: rootProject.layout.projectDirectory
         .file("target/release/libpapermc_loader.so").asFile.absolutePath
-val coreLib: String = (project.findProperty("core-lib") as String?)
+val pluginLib: String = (project.findProperty("plugin-lib") as String?)
     ?: rootProject.layout.projectDirectory
-        .file("target/release/libdisco_core.so").asFile.absolutePath
+        .file("target/release/libdisco_plugin.so").asFile.absolutePath
 
 tasks.runServer {
     minecraftVersion(mcVersion)
     runDirectory.set(rootProject.layout.projectDirectory.dir("run"))
     systemProperty("papermc.loader.path", loaderLib)
-    systemProperty("papermc.loader.plugin.path.disco", coreLib)
+    systemProperty("papermc.loader.plugin.path.disco", pluginLib)
     environment("RUST_LOG", System.getenv("RUST_LOG") ?: "DEBUG")
     // Auto-accept Mojang's EULA for the dev server (https://www.minecraft.net/en-us/eula).
     doFirst {
