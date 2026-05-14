@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import org.bukkit.event.Event;
 import org.bukkit.event.Listener;
@@ -22,6 +22,6 @@ public final class RustEventExecutor implements EventExecutor, Listener {
 
     @Override
     public void execute(Listener listener, Event event) {
-        PaperRs.dispatchEvent(handlerId, event);
+        RustPlugin.dispatch_event(handlerId, event);
     }
 }

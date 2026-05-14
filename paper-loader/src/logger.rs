@@ -5,7 +5,7 @@
 //! become unmapped on `/reload` and crash on the next tracing event. Keeping it here makes the
 //! subscriber a one-time, process-lifetime install.
 //!
-//! The dispatcher class (`io.paperrs.shim.PaperFfiLogger`) must expose a static
+//! The dispatcher class (`io.papermc.RustTracingSubscriber`) must expose a static
 //! `dispatch(int level, String target, String message)` method. Level mapping: 0=ERROR, 1=WARN,
 //! 2=INFO, 3=DEBUG, 4=TRACE. Filtering is controlled by `RUST_LOG` (default: `info`).
 
@@ -47,7 +47,7 @@ pub(crate) fn install(env: &mut Env) -> jni::errors::Result<()> {
             *jvm = Some(env.get_java_vm()?);
         }
     }
-    let class = env.find_class(jni_str!("io/paperrs/shim/PaperFfiLogger"))?;
+    let class = env.find_class(jni_str!("io/papermc/RustTracingSubscriber"))?;
     let class_global = env.new_global_ref(class)?;
     *DISPATCHER_CLASS.lock().unwrap() = Some(class_global);
 

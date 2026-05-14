@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

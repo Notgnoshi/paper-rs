@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -20,6 +20,6 @@ public final class RustCommand extends Command {
 
     @Override
     public boolean execute(CommandSender sender, String label, String[] args) {
-        return PaperRs.dispatchCommand(handlerId, sender, args);
+        return RustPlugin.dispatch_command(handlerId, sender, args);
     }
 }

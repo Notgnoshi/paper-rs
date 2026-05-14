@@ -5,29 +5,29 @@ mod api;
 mod builder;
 pub mod bukkit;
 pub(crate) mod callbacks;
-mod core_init;
 pub(crate) mod ctx;
 mod dispatch;
 pub(crate) mod ffi;
 pub mod jobject_repr;
+mod plugin_init;
 mod registration;
 
 pub use api::Api;
 pub use builder::PluginBuilder;
-pub use core_init::core_init;
+pub use plugin_init::plugin_init;
 
-/// ABI version of the `CoreApi` struct.
+/// ABI version of the `FnTable` struct.
 ///
 /// Bump when adding fields. Loaders refuse to load plugins with a mismatched version.
-pub const CORE_ABI_VERSION: u32 = 2;
+pub const PLUGIN_ABI_VERSION: u32 = 2;
 
 /// The function-pointer table that plugins hand back to `paper-loader` at init time.
 ///
 /// paper-loader's stable JNI symbols forward to these function pointers for all per-call work.
 #[repr(C)]
-pub struct CoreApi {
+pub struct FnTable {
     pub abi_version: u32,
-    /// Size of the CoreApi struct
+    /// Size of the FnTable struct
     ///
     /// Used to detect ABI mismatches when loading plugins compiled against different versions of
     /// this library.

@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import java.lang.ref.Cleaner;
 

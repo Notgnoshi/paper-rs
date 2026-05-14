@@ -41,7 +41,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
     /// `paper::bukkit::event`); the handler receives the corresponding `Event::Wrapper` for the JNI
     /// frame's lifetime.
     ///
-    /// Returns `Err` if registration with Bukkit fails. Callers in `paper_core_init` should
+    /// Returns `Err` if registration with Bukkit fails. Callers in `papermc_plugin_init` should
     /// propagate via `?` so a failed registration aborts plugin init cleanly with the underlying
     /// Java exception preserved.
     pub fn on<E: Event>(
@@ -77,7 +77,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             );
             id
         })
-        .expect("Ctx installed during core_init");
+        .expect("Ctx installed during plugin_init");
         Ok(registration::subscribe_event(self.env, E::CLASS_NAME, id)?)
     }
 
@@ -114,7 +114,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
             );
             id
         })
-        .expect("Ctx installed during core_init");
+        .expect("Ctx installed during plugin_init");
         Ok(registration::register_command(self.env, name, id)?)
     }
 }

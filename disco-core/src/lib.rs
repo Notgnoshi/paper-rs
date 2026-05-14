@@ -7,11 +7,11 @@ use paper::bukkit::event::{
     PlayerInteractEntityEventRef,
 };
 use paper::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Sheep};
-use paper::{Api, CoreApi, PluginBuilder};
+use paper::{Api, FnTable, PluginBuilder};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn paper_core_init(env: *mut JNIEnv, plugin: jobject) -> *const CoreApi {
-    paper::core_init(env, plugin, |b: &mut PluginBuilder| {
+pub extern "C" fn papermc_plugin_init(env: *mut JNIEnv, plugin: jobject) -> *const FnTable {
+    paper::plugin_init(env, plugin, |b: &mut PluginBuilder| {
         b.on::<PlayerInteractEntityEvent>(handle_interact)?;
         b.on::<EntityDamageByEntityEvent>(handle_sheep_damaged)?;
         b.command("hello", handle_hello)?;

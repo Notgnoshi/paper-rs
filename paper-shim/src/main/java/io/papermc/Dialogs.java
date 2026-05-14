@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;

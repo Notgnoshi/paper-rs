@@ -13,7 +13,7 @@ use crate::dispatch::{CommandHandler, EventHandler};
 /// Reload-scoped state for a Paper plugin.
 ///
 /// [`Ctx`] is the single consolidated home for state that needs to outlive an individual JNI
-/// dispatch call but not survive a `/reload`. Born in `core_init`, dropped in `core_shutdown`.
+/// dispatch call but not survive a `/reload`. Born in `plugin_init`, dropped in `plugin_shutdown`.
 ///
 /// The Ctx is stored in a global static, but its lifetime is scoped by the plugin initialization
 /// and shutdown.
@@ -77,7 +77,7 @@ impl Ctx {
 
 /// Singleton Ctx storage.
 ///
-/// `None` between `core_shutdown` and the next `core_init`. `install` refuses to overwrite an
+/// `None` between `plugin_shutdown` and the next `plugin_init`. `install` refuses to overwrite an
 /// existing `Some` so that reload-shutdown-then-init is the only legal init path.
 static CTX: Mutex<Option<Ctx>> = Mutex::new(None);
 
@@ -128,7 +128,7 @@ pub(crate) fn cached_class<'local>(
             None => Ok(None),
         }
     })
-    .expect("Ctx installed during core_init")?;
+    .expect("Ctx installed during plugin_init")?;
     if let Some(local) = hit {
         return Ok(local);
     }

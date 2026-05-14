@@ -20,7 +20,7 @@ fn instance<'local>(env: &mut Env<'local>) -> jni::errors::Result<JObject<'local
         let global = c.mini_message.as_ref().unwrap();
         env.new_local_ref(global)
     })
-    .expect("Ctx installed during core_init")
+    .expect("Ctx installed during plugin_init")
 }
 
 /// Parse `text` as MiniMessage and return the resulting Adventure `Component` JNI ref.

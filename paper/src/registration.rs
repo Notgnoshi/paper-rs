@@ -12,7 +12,7 @@ pub(crate) fn subscribe_event<'local>(
 ) -> jni::errors::Result<()> {
     let event_class = ctx::cached_class(env, event_class_name)?;
     let executor = env.new_object(
-        jni_str!("io/paperrs/shim/RustEventExecutor"),
+        jni_str!("io/papermc/RustEventExecutor"),
         jni_sig!("(J)V"),
         &[JValue::Long(handler_id)],
     )?;
@@ -57,7 +57,7 @@ pub(crate) fn subscribe_event<'local>(
         )?;
         Ok(())
     })
-    .expect("Ctx installed during core_init")
+    .expect("Ctx installed during plugin_init")
 }
 
 /// Construct a `RustCommand(name, handlerId)` and register it with the server's CommandMap. The
@@ -69,7 +69,7 @@ pub(crate) fn register_command<'local>(
 ) -> jni::errors::Result<()> {
     let name_jstr = env.new_string(name)?;
     let command = env.new_object(
-        jni_str!("io/paperrs/shim/RustCommand"),
+        jni_str!("io/papermc/RustCommand"),
         jni_sig!("(Ljava/lang/String;J)V"),
         &[JValue::Object(&name_jstr), JValue::Long(handler_id)],
     )?;
@@ -101,12 +101,12 @@ pub(crate) fn register_command<'local>(
         c.registered_commands.push(cmd_global);
         Ok(())
     })
-    .expect("Ctx installed during core_init")
+    .expect("Ctx installed during plugin_init")
 }
 
 /// Walk the tracked `RustCommand` instances and call `Command.unregister(commandMap)` on each.
 ///
-/// Called from `core_shutdown`.
+/// Called from `plugin_shutdown`.
 pub(crate) fn unregister_commands(env: &mut Env<'_>) -> jni::errors::Result<()> {
     let commands =
         ctx::with_ctx(|c| std::mem::take(&mut c.registered_commands)).unwrap_or_default();
@@ -143,7 +143,7 @@ pub(crate) fn unregister_commands(env: &mut Env<'_>) -> jni::errors::Result<()> 
 
 /// Unregister every Bukkit listener attached to this plugin.
 ///
-/// Wraps Bukkit's `HandlerList.unregisterAll(Plugin)`. Called from `core_shutdown` so the
+/// Wraps Bukkit's `HandlerList.unregisterAll(Plugin)`. Called from `plugin_shutdown` so the
 /// PluginManager stops delivering events to our `RustEventExecutor` instances before we drop the
 /// Rust-side handler maps; otherwise an event firing between handler-map teardown and Bukkit's
 /// own listener cleanup would log a spurious "no handler registered" warning (and, in the
@@ -158,5 +158,5 @@ pub(crate) fn unregister_all_listeners(env: &mut Env<'_>) -> jni::errors::Result
         )?;
         Ok(())
     })
-    .expect("Ctx installed during core_init")
+    .expect("Ctx installed during plugin_init")
 }

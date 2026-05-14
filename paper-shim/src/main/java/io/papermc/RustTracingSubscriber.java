@@ -1,4 +1,4 @@
-package io.paperrs.shim;
+package io.papermc;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -14,7 +14,7 @@ import java.util.logging.Logger;
  * Sub-INFO Rust events (DEBUG, TRACE) are emitted at INFO so they survive
  * Paper's appender filtering.
  */
-public final class PaperFfiLogger {
+public final class RustTracingSubscriber {
 
     private static final Level[] JAVA_LEVELS = {
             Level.SEVERE,
@@ -28,7 +28,7 @@ public final class PaperFfiLogger {
 
     private static volatile Logger logger;
 
-    private PaperFfiLogger() {
+    private RustTracingSubscriber() {
     }
 
     public static void install(Logger l) {

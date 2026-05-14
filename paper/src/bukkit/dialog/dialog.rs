@@ -8,7 +8,7 @@ use crate::api::Api;
 ///
 /// Java's `Dialog.create` takes a `Consumer<RegistryBuilderFactory<...>>` lambda. Constructing
 /// that lambda from Rust requires the functional-interface-to-Rust-closure bridge (stage 4),
-/// so for now we route through a small paper-shim Java helper `io.paperrs.shim.Dialogs.create`
+/// so for now we route through a small paper-shim Java helper `io.papermc.Dialogs.create`
 /// that hides the lambda surface.
 #[repr(transparent)]
 pub struct Dialog<'local> {
@@ -28,7 +28,7 @@ impl<'local> Dialog<'local> {
         let env = api.jni();
         let obj = env
             .call_static_method(
-                jni_str!("io/paperrs/shim/Dialogs"),
+                jni_str!("io/papermc/Dialogs"),
                 jni_str!("create"),
                 jni_sig!(
                     "(Lio/papermc/paper/registry/data/dialog/DialogBase;Lio/papermc/paper/registry/data/dialog/type/DialogType;)Lio/papermc/paper/dialog/Dialog;"

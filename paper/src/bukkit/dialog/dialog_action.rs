@@ -60,10 +60,10 @@ impl<'local> DialogAction<'local> {
             c.callbacks.insert(id, Arc::new(callback));
             id
         })
-        .expect("Ctx installed during core_init");
+        .expect("Ctx installed during plugin_init");
 
         let bridge = env.new_object(
-            jni_str!("io/paperrs/shim/RustDialogActionCallback"),
+            jni_str!("io/papermc/RustDialogActionCallback"),
             jni_sig!("(J)V"),
             &[JValue::Long(id)],
         )?;
