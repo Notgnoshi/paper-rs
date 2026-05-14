@@ -21,7 +21,7 @@ cargo:
 
 .PHONY: run
 run: disco-plugin
-	RUST_LOG=$(RUST_LOG) ./gradlew :disco-plugin:runServer -Pnative-lib=$(abspath target/release/libdisco_ffi.so)
+	RUST_LOG=$(RUST_LOG) ./gradlew :disco-plugin:runServer
 
 .PHONY: clean clean-all
 clean:

@@ -22,11 +22,14 @@ public class RustReloadablePlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        // TODO: Should we normalize - to _?
-        String pluginKey = getName().toLowerCase(Locale.ROOT);
-        String loaderPath = NativeLoader.locate("libpapermc_loader.so", "papermc.loader.path");
+        // Normalize `-` to `_` so the key matches what Cargo produces for crate
+        // names containing dashes (Cargo rewrites `-` to `_` in the cdylib
+        // filename).
+        String pluginKey = getName().toLowerCase(Locale.ROOT).replace('-', '_');
+        ClassLoader cl = getClass().getClassLoader();
+        String loaderPath = NativeLoader.locate("libpapermc_loader.so", "papermc.loader.path", pluginKey, cl);
         String pluginPath = NativeLoader.locate("lib" + pluginKey + "_plugin.so",
-                "papermc.loader.plugin.path." + pluginKey);
+                "papermc.loader.plugin.path." + pluginKey, pluginKey, cl);
 
         NativeLoader.load(loaderPath);
         RustTracingSubscriber.install(getLogger());

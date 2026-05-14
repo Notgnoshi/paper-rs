@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     `java-library`
     // https://plugins.gradle.org/plugin/xyz.jpenilla.run-paper
@@ -23,19 +25,28 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:$mcVersion.build.+")
 }
 
-// Paths to the two Rust cdylibs the dev server loads.
-val loaderLib: String = (project.findProperty("loader-lib") as String?)
-    ?: rootProject.layout.projectDirectory
-        .file("target/release/libpapermc_loader.so").asFile.absolutePath
-val pluginLib: String = (project.findProperty("plugin-lib") as String?)
-    ?: rootProject.layout.projectDirectory
-        .file("target/release/libdisco_plugin.so").asFile.absolutePath
+// Paths to the two Rust cdylibs.
+val loaderLibPath = rootProject.layout.projectDirectory
+    .file("target/release/libpapermc_loader.so").asFile.absolutePath
+val pluginLibPath = rootProject.layout.projectDirectory
+    .file("target/release/libdisco_plugin.so").asFile.absolutePath
+
+// Bundle the two cdylibs into the plugin jar as resources under `native/`. papermc's NativeLoader
+// extracts them from there at runtime when no `papermc.loader.path` /
+// `papermc.loader.plugin.path.disco` system property is set (i.e. for production drop-in
+// distributions).
+tasks.processResources {
+    from(loaderLibPath) { into("native") }
+    from(pluginLibPath) { into("native") }
+}
 
 tasks.runServer {
     minecraftVersion(mcVersion)
     runDirectory.set(rootProject.layout.projectDirectory.dir("run"))
-    systemProperty("papermc.loader.path", loaderLib)
-    systemProperty("papermc.loader.plugin.path.disco", pluginLib)
+    // Dev workflow: point papermc at the cargo-built .so directly so a `cargo build --release`
+    // followed by `/reload` picks up the new bytes without going through jar repackaging.
+    systemProperty("papermc.loader.path", loaderLibPath)
+    systemProperty("papermc.loader.plugin.path.disco", pluginLibPath)
     environment("RUST_LOG", System.getenv("RUST_LOG") ?: "DEBUG")
     // Auto-accept Mojang's EULA for the dev server (https://www.minecraft.net/en-us/eula).
     doFirst {
