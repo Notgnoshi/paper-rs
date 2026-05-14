@@ -1,18 +1,14 @@
 //! Bridges Rust `tracing` events into the JVM's Java logger via a static dispatcher class.
 //!
-//! The logger functions are called from every cdylib that links papermc: papermc-loader installs
-//! its own subscriber from `JNI_OnLoad`, and each plugin cdylib installs its own from
-//! [`crate::init`]. Each cdylib has its own copy of `tracing-core`'s `GLOBAL_DISPATCH` (because
-//! `tracing-core` is an rlib statically linked into every cdylib), so each cdylib needs its own
-//! subscriber install for its events to reach Java. The Layer itself is a ZST that just consults
-//! the cdylib-local `JVM` and `DISPATCHER_CLASS` statics, so the install is cheap.
+//! Each cdylib that links papermc has its own copy of `tracing-core`'s global dispatch (because
+//! `tracing-core` is statically linked into every cdylib), so each cdylib installs its own
+//! subscriber: papermc-loader from `JNI_OnLoad`, plugin cdylibs from [`crate::init`].
 //!
-//! The dispatcher class (`io.papermc.RustTracingSubscriber`) must expose a static
-//! `dispatch(int level, String target, String message)` method. Level mapping: 0=ERROR, 1=WARN,
-//! 2=INFO, 3=DEBUG, 4=TRACE. Filtering is controlled by `RUST_LOG` (default: `info`).
+//! `RUST_LOG` is read once at first cdylib install. Server restart required to pick up changes.
 
-use std::sync::{Mutex, Once};
+use std::sync::{Arc, OnceLock};
 
+use arc_swap::ArcSwapOption;
 use jni::objects::{JClass, JValue};
 use jni::refs::Global;
 use jni::{Env, JavaVM, jni_sig, jni_str};
@@ -20,51 +16,27 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
-/// Cached `JavaVM` handle. The JVM is the same instance across `/reload`, so we fetch it once
-/// and keep it.
-static JVM: Mutex<Option<JavaVM>> = Mutex::new(None);
+static JVM: OnceLock<JavaVM> = OnceLock::new();
+static DISPATCHER_CLASS: ArcSwapOption<Global<JClass<'static>>> = ArcSwapOption::const_empty();
 
-/// Global ref to the dispatcher class. Refreshed on every `bind_dispatcher` so the cached
-/// `Global` doesn't pin a stale `ClassLoader` from a previous load.
-static DISPATCHER_CLASS: Mutex<Option<Global<JClass<'static>>>> = Mutex::new(None);
-
-/// Tracks the one-shot subscriber installation. `tracing` only honors a single global default
-/// per cdylib, and `try_init` after the first call is a silent no-op; using `Once` makes the
-/// contract explicit and avoids rebuilding the filter on repeated calls.
-static SUBSCRIBER_INIT: Once = Once::new();
-
-/// Install this cdylib's tracing subscriber and cache the `JavaVM` it will use to attach threads at
-/// emit time. Idempotent: subsequent calls within the same cdylib are no-ops.
-///
-/// Called once from papermc-loader's `JNI_OnLoad` (so loader-side `tracing::*` events reach Java),
-/// and once from [`crate::init`] (so plugin-side events reach Java).
+/// Idempotent within a cdylib. Called from papermc-loader's `JNI_OnLoad` and from [`crate::init`].
 pub fn install_subscriber(jvm: JavaVM) {
-    {
-        let mut guard = JVM.lock().unwrap();
-        if guard.is_none() {
-            *guard = Some(jvm);
-        }
-    }
+    let _ = JVM.set(jvm);
+    static SUBSCRIBER_INIT: std::sync::Once = std::sync::Once::new();
     SUBSCRIBER_INIT.call_once(install_layer);
 }
 
-/// Cache a fresh `Global<JClass>` for the dispatcher class so the JNI layer can call
-/// `RustTracingSubscriber.dispatch(...)` without a per-event `FindClass`.
-///
-/// Called on every plugin enable so the cached class isn't pinning a stale ClassLoader after
-/// `/reload`. The previous `Global`'s `Drop` releases its ref on the prior ClassLoader.
+/// Refresh on every plugin enable so the cached `Global` doesn't pin a stale ClassLoader.
 pub fn bind_dispatcher(env: &mut Env) -> jni::errors::Result<()> {
     let class = env.find_class(jni_str!("io/papermc/RustTracingSubscriber"))?;
     let class_global = env.new_global_ref(class)?;
-    *DISPATCHER_CLASS.lock().unwrap() = Some(class_global);
+    DISPATCHER_CLASS.store(Some(Arc::new(class_global)));
     Ok(())
 }
 
-/// Drop the cached dispatcher-class `Global` so its `ClassLoader` can be GC'd on `/reload`.
-///
-/// Tracing events between `unbind_dispatcher` and the next `bind_dispatcher` are silently dropped.
+/// Events emitted between `unbind_dispatcher` and the next `bind_dispatcher` no-op silently.
 pub fn unbind_dispatcher() {
-    *DISPATCHER_CLASS.lock().unwrap() = None;
+    DISPATCHER_CLASS.store(None);
 }
 
 fn install_layer() {
@@ -82,10 +54,9 @@ struct JniLayer;
 
 impl<S: Subscriber> Layer<S> for JniLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        let jvm_lock = JVM.lock().unwrap();
-        let Some(jvm) = jvm_lock.as_ref() else { return };
-        let class_lock = DISPATCHER_CLASS.lock().unwrap();
-        let Some(class) = class_lock.as_ref() else {
+        let Some(jvm) = JVM.get() else { return };
+        let class_guard = DISPATCHER_CLASS.load();
+        let Some(class) = class_guard.as_ref() else {
             return;
         };
 
@@ -105,9 +76,7 @@ impl<S: Subscriber> Layer<S> for JniLayer {
         };
         event.record(&mut visitor);
 
-        // Embed structured fields into the target string the Java dispatcher already prints in
-        // the prefix. `tracing::info!(id = 7, "loaded")` lands in the log as
-        // `[INFO: papermc_loader, id=7] loaded` instead of dropping `id` on the floor.
+        // Pack fields into the target string so they survive the Java dispatcher's flat prefix.
         let target = if fields.is_empty() {
             event.metadata().target().to_string()
         } else {
@@ -123,7 +92,7 @@ impl<S: Subscriber> Layer<S> for JniLayer {
             let target_jstr = env.new_string(&target)?;
             let message_jstr = env.new_string(&message)?;
             env.call_static_method(
-                class,
+                &**class,
                 jni_str!("dispatch"),
                 jni_sig!("(ILjava/lang/String;Ljava/lang/String;)V"),
                 &[
@@ -137,11 +106,7 @@ impl<S: Subscriber> Layer<S> for JniLayer {
     }
 }
 
-/// Splits a tracing event's recorded fields into its message text and the rest.
-///
-/// `record_debug` is the only method we override; the other `record_*` variants on
-/// `tracing::field::Visit` default to calling `record_debug`, so this catches all field types
-/// (str, i64, u64, bool, etc.) without per-type plumbing.
+/// `record_debug` catches all field types via the default `record_*` impls.
 struct EventVisitor<'a> {
     message: &'a mut String,
     fields: &'a mut Vec<(&'static str, String)>,

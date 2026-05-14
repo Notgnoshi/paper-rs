@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+arc-swap.workspace = true
 eyre.workspace = true
 jni.workspace = true
 jni-sys.workspace = true
