@@ -12,7 +12,7 @@ use jni::objects::{JClass, JObject, JString};
 use jni::sys::{JNI_FALSE, jboolean, jlong, jobject, jobjectArray};
 use jni::{Env, EnvUnowned};
 use libloading::{Library, Symbol};
-use paper::{FnTable, PLUGIN_ABI_VERSION};
+use papermc::{FnTable, PLUGIN_ABI_VERSION};
 
 mod logger;
 
@@ -100,9 +100,9 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1enable<'local>(
             // Earlier events (before this line) would land in /dev/null since the subscriber
             // isn't installed yet, so there's nothing to log here.
             if let Err(e) = logger::install(env) {
-                eprintln!("paper-loader: logger install failed: {e}");
+                eprintln!("papermc-loader: logger install failed: {e}");
             }
-            tracing::debug!("paper-loader: init entered");
+            tracing::debug!("papermc-loader: init entered");
             let path = plugin_path.try_to_string(env)?;
             // Atomically take ownership of any stale plugin. Dispatch threads hitting the
             // swap-to-None window still hold guards on the old Arc, so its `Library` won't
@@ -110,18 +110,18 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1enable<'local>(
             let stale = LOADED_PLUGIN.swap(None);
             if let Some(loaded) = stale.as_ref() {
                 tracing::warn!(
-                    "paper-loader: stale plugin present; running shutdown before re-load"
+                    "papermc-loader: stale plugin present; running shutdown before re-load"
                 );
                 let _ = unsafe { ((*loaded.api).shutdown)(env.get_raw()) };
                 drop(stale);
             }
-            tracing::debug!("paper-loader: dlopen({path})");
+            tracing::debug!("papermc-loader: dlopen({path})");
             let _api_ptr = load_plugin(&path, env.get_raw(), plugin.as_raw()).map_err(|msg| {
-                tracing::error!("paper-loader: load_plugin failed: {msg}");
+                tracing::error!("papermc-loader: load_plugin failed: {msg}");
                 let _ = env.throw(msg);
                 Error::JavaException
             })?;
-            tracing::info!("paper-loader: {path} init complete");
+            tracing::info!("papermc-loader: {path} init complete");
             Ok(())
         })
         .resolve::<ThrowRuntimeExAndDefault>()
@@ -132,19 +132,21 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1disable<'local>(
     mut unowned: EnvUnowned<'local>,
     _class: JClass<'local>,
 ) {
-    tracing::info!("paper-loader: shutdown entered");
+    tracing::info!("papermc-loader: shutdown entered");
     let _ = unowned
         .with_env(|env: &mut Env<'local>| -> jni::errors::Result<()> {
             let guard = LOADED_PLUGIN.load();
             if let Some(loaded) = guard.as_ref() {
-                tracing::info!("paper-loader: calling plugin shutdown");
+                tracing::info!("papermc-loader: calling plugin shutdown");
                 let _ = unsafe { ((*loaded.api).shutdown)(env.get_raw()) };
                 drop(guard);
-                tracing::debug!("paper-loader: dropping plugin library (dlclose may be deferred)");
+                tracing::debug!(
+                    "papermc-loader: dropping plugin library (dlclose may be deferred)"
+                );
                 unload_plugin();
-                tracing::debug!("paper-loader: unload complete");
+                tracing::debug!("papermc-loader: unload complete");
             } else {
-                tracing::warn!("paper-loader: no plugin to shutdown");
+                tracing::warn!("papermc-loader: no plugin to shutdown");
             }
             // Drop the dispatcher class Global so the unloading plugin's ClassLoader can be GC'd.
             // Tracing events between here and the next install will no-op silently.

@@ -12,7 +12,7 @@ pub use sheep::Sheep;
 ///
 /// Use [`EntityInst::cast`] to narrow to a specific subtype like [`Sheep`].
 ///
-/// `#[repr(transparent)]` so paper-rs can reinterpret a borrowed `&JObject` as a borrowed
+/// `#[repr(transparent)]` so papermc can reinterpret a borrowed `&JObject` as a borrowed
 /// `&EntityInst` at dispatch time.
 #[repr(transparent)]
 pub struct EntityInst<'local> {

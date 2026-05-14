@@ -19,14 +19,14 @@ java {
 // https://papermc.io/downloads/paper
 val mcVersion = "26.1.2"
 dependencies {
-    implementation(project(":paper-shim"))
+    implementation(project(":papermc"))
     compileOnly("io.papermc.paper:paper-api:$mcVersion.build.+")
 }
 
 // Paths to the two Rust cdylibs the dev server loads.
 val loaderLib: String = (project.findProperty("loader-lib") as String?)
     ?: rootProject.layout.projectDirectory
-        .file("target/release/libpaper_loader.so").asFile.absolutePath
+        .file("target/release/libpapermc_loader.so").asFile.absolutePath
 val coreLib: String = (project.findProperty("core-lib") as String?)
     ?: rootProject.layout.projectDirectory
         .file("target/release/libdisco_core.so").asFile.absolutePath
@@ -34,8 +34,8 @@ val coreLib: String = (project.findProperty("core-lib") as String?)
 tasks.runServer {
     minecraftVersion(mcVersion)
     runDirectory.set(rootProject.layout.projectDirectory.dir("run"))
-    systemProperty("paper.loader.path", loaderLib)
-    systemProperty("disco.core.path", coreLib)
+    systemProperty("papermc.loader.path", loaderLib)
+    systemProperty("papermc.loader.plugin.path.disco", coreLib)
     environment("RUST_LOG", System.getenv("RUST_LOG") ?: "DEBUG")
     // Auto-accept Mojang's EULA for the dev server (https://www.minecraft.net/en-us/eula).
     doFirst {

@@ -38,7 +38,7 @@ impl<'a, 'local> PluginBuilder<'a, 'local> {
     /// Register a Bukkit event handler.
     ///
     /// The event type is identified by an implementation of [`Event`] (typically a marker type in
-    /// `paper::bukkit::event`); the handler receives the corresponding `Event::Wrapper` for the JNI
+    /// `papermc::bukkit::event`); the handler receives the corresponding `Event::Wrapper` for the JNI
     /// frame's lifetime.
     ///
     /// Returns `Err` if registration with Bukkit fails. Callers in `papermc_plugin_init` should

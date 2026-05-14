@@ -8,7 +8,7 @@ use crate::api::Api;
 ///
 /// Java's `Dialog.create` takes a `Consumer<RegistryBuilderFactory<...>>` lambda. Constructing
 /// that lambda from Rust requires the functional-interface-to-Rust-closure bridge (stage 4),
-/// so for now we route through a small paper-shim Java helper `io.papermc.Dialogs.create`
+/// so for now we route through a small papermc Java helper `io.papermc.Dialogs.create`
 /// that hides the lambda surface.
 #[repr(transparent)]
 pub struct Dialog<'local> {
@@ -18,7 +18,7 @@ pub struct Dialog<'local> {
 impl<'local> Dialog<'local> {
     /// Construct a Dialog from a DialogBase and DialogType.
     ///
-    /// Wraps the paper-shim `Dialogs.create(DialogBase, DialogType)` helper, which itself calls
+    /// Wraps the papermc `Dialogs.create(DialogBase, DialogType)` helper, which itself calls
     /// `Dialog.create(b -> b.empty().base(base).type(type))`.
     pub fn create(
         api: &mut Api<'_, 'local>,

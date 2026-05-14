@@ -1,6 +1,6 @@
 //! Bridges Rust `tracing` events into the JVM's Java logger via a static dispatcher class.
 //!
-//! The subscriber lives here in paper-loader rather than in a core plugin because paper-loader's
+//! The subscriber lives here in papermc-loader rather than in a core plugin because papermc-loader.s
 //! .so is never unloaded; a subscriber whose `JniLayer` code lives in a `dlclose`-able .so would
 //! become unmapped on `/reload` and crash on the next tracing event. Keeping it here makes the
 //! subscriber a one-time, process-lifetime install.
@@ -102,7 +102,7 @@ impl<S: Subscriber> Layer<S> for JniLayer {
 
         // Embed structured fields into the target string the Java dispatcher already prints in
         // the prefix. `tracing::info!(id = 7, "loaded")` lands in the log as
-        // `[INFO: paper_loader, id=7] loaded` instead of dropping `id` on the floor.
+        // `[INFO: papermc_loader, id=7] loaded` instead of dropping `id` on the floor.
         let target = if fields.is_empty() {
             event.metadata().target().to_string()
         } else {

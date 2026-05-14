@@ -73,7 +73,7 @@ pub(crate) fn register_command<'local>(
         jni_sig!("(Ljava/lang/String;J)V"),
         &[JValue::Object(&name_jstr), JValue::Long(handler_id)],
     )?;
-    let fallback = env.new_string("paper-rs")?;
+    let fallback = env.new_string("papermc")?;
     ctx::with_ctx(|c| -> jni::errors::Result<()> {
         let server = env
             .call_method(

@@ -5,7 +5,7 @@ import org.bukkit.plugin.Plugin;
 /**
  * Generic JNI dispatch surface. All Java -> Rust calls funnel through these
  * static native methods, which are linked to symbols in
- * {@code libpaper_loader.so}.
+ * {@code libpapermc_loader.so}.
  *
  * Plugin authors should not need to touch this class; it's the contract between
  * the Java side and the Rust loader. Adding plugin functionality is a pure-Rust

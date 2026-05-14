@@ -1,17 +1,15 @@
 [package]
-name = "paper-loader"
+name = "papermc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-arc-swap.workspace = true
+eyre.workspace = true
 jni.workspace = true
-libloading.workspace = true
-paper.workspace = true
+jni-sys.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["rlib"]

@@ -2,7 +2,7 @@ name: Disco
 version: 0.0.1-rc0
 main: io.disco.plugin.DiscoPlugin
 api-version: '26.1.2'
-description: PoC plugin proving Paper + Rust feasibility via paper-loader.
+description: PoC plugin proving Paper + Rust feasibility via papermc-loader.
 author: Austin Gill
 # Commands are registered programmatically from Rust via the CommandMap.
 # The plugin self-cycles in response to ServerResourcesReloadedEvent

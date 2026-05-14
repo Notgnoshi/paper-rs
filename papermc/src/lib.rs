@@ -21,9 +21,9 @@ pub use plugin_init::plugin_init;
 /// Bump when adding fields. Loaders refuse to load plugins with a mismatched version.
 pub const PLUGIN_ABI_VERSION: u32 = 2;
 
-/// The function-pointer table that plugins hand back to `paper-loader` at init time.
+/// The function-pointer table that plugins hand back to `papermc-loader` at init time.
 ///
-/// paper-loader's stable JNI symbols forward to these function pointers for all per-call work.
+/// papermc-loader.s stable JNI symbols forward to these function pointers for all per-call work.
 #[repr(C)]
 pub struct FnTable {
     pub abi_version: u32,

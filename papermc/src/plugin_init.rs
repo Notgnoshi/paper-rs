@@ -44,14 +44,14 @@ unsafe extern "C" fn plugin_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
 /// Builds a `PluginBuilder`, runs the user's `build` closure to register handlers, and returns the
 /// static `FnTable` the loader will dispatch through.
 ///
-/// Returns a null pointer if the build closure returned `Err`. paper-loader maps a null return to a
+/// Returns a null pointer if the build closure returned `Err`. papermc-loader maps a null return to a
 /// Java `RuntimeException`, aborting plugin init cleanly with the underlying exception surfaced via
 /// Bukkit's normal error path.
 //
 // `plugin_init` is invoked from a plugin's C-ABI `papermc_plugin_init` symbol with raw pointers
 // handed to it by the JVM. JNI's calling convention is the contract for those pointers being
 // valid; null is null-checked inside [`ffi::bridge`]. Keeping this function safe at the Rust level
-// lets plugin authors write `paper::plugin_init(env, plugin, ...)` without an unsafe wrapper at
+// lets plugin authors write `papermc::plugin_init(env, plugin, ...)` without an unsafe wrapper at
 // every call site.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn plugin_init<F>(

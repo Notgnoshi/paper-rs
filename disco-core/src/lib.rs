@@ -1,17 +1,17 @@
 use jni::sys::{JNIEnv, jobject};
-use paper::bukkit::dialog::{
+use papermc::bukkit::dialog::{
     ActionButton, ClickCallbackOptions, Dialog, DialogAction, DialogBase, DialogType,
 };
-use paper::bukkit::event::{
+use papermc::bukkit::event::{
     EntityDamageByEntityEvent, EntityDamageByEntityEventRef, PlayerInteractEntityEvent,
     PlayerInteractEntityEventRef,
 };
-use paper::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Sheep};
-use paper::{Api, FnTable, PluginBuilder};
+use papermc::bukkit::{Audience, CommandSender, CommandSenderInst, Component, DyeColor, Sheep};
+use papermc::{Api, FnTable, PluginBuilder};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn papermc_plugin_init(env: *mut JNIEnv, plugin: jobject) -> *const FnTable {
-    paper::plugin_init(env, plugin, |b: &mut PluginBuilder| {
+    papermc::plugin_init(env, plugin, |b: &mut PluginBuilder| {
         b.on::<PlayerInteractEntityEvent>(handle_interact)?;
         b.on::<EntityDamageByEntityEvent>(handle_sheep_damaged)?;
         b.command("hello", handle_hello)?;

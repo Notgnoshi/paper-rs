@@ -16,16 +16,16 @@ public final class DiscoPlugin extends JavaPlugin {
     public void onEnable() {
         getLogger().info("onEnable: starting Disco PoC");
 
-        String loaderPath = System.getProperty("paper.loader.path");
+        String loaderPath = System.getProperty("papermc.loader.path");
         if (loaderPath == null) {
-            throw new IllegalStateException("Missing paper.loader.path system property");
+            throw new IllegalStateException("Missing papermc.loader.path system property");
         }
-        String corePath = System.getProperty("disco.core.path");
+        String corePath = System.getProperty("papermc.loader.plugin.path.disco");
         if (corePath == null) {
-            throw new IllegalStateException("Missing disco.core.path system property");
+            throw new IllegalStateException("Missing papermc.loader.plugin.path.disco system property");
         }
         NativeLoader.load(loaderPath);
-        getLogger().info("onEnable: paper-loader loaded from " + loaderPath);
+        getLogger().info("onEnable: papermc-loader loaded from " + loaderPath);
 
         RustTracingSubscriber.install(getLogger());
         getLogger().info("onEnable: calling RustPlugin.on_enable with plugin=" + corePath);

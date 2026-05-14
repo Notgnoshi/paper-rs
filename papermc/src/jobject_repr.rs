@@ -3,7 +3,7 @@ use jni::objects::JObject;
 /// Marker trait for wrapper types that are layout-compatible with `JObject<'local>` and may
 /// therefore be borrowed-cast from a `&JObject<'local>`.
 ///
-/// Several dispatch sites in paper hold a `&JObject<'local>` (the raw event/sender/etc. handed to a
+/// Several dispatch sites in papermc hold a `&JObject<'local>` (the raw event/sender/etc. handed to a
 /// JNI trampoline) and need to hand the user code a `&FooRef<'local>` instead -- a wrapper that
 /// exposes typed accessors. The conversion is a pointer reinterpret; for that to be sound,
 /// `FooRef<'local>` must be `#[repr(transparent)]` over `JObject<'local>`.
