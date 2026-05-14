@@ -1,6 +1,6 @@
 name: Disco
 version: 0.0.1-rc0
-main: io.disco.plugin.DiscoPlugin
+main: io.papermc.RustReloadablePlugin
 api-version: '26.1.2'
 description: PoC plugin proving Paper + Rust feasibility via papermc-loader.
 author: Austin Gill
