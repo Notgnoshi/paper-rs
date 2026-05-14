@@ -9,12 +9,16 @@ pub(crate) mod ctx;
 mod dispatch;
 pub(crate) mod ffi;
 pub mod jobject_repr;
+mod plugin;
 mod plugin_init;
 mod registration;
+mod setup_api;
 
 pub use api::Api;
 pub use builder::PluginBuilder;
-pub use plugin_init::plugin_init;
+pub use plugin::Plugin;
+pub use plugin_init::{init, plugin_init};
+pub use setup_api::SetupApi;
 
 /// ABI version of the `FnTable` struct.
 ///
@@ -23,7 +27,7 @@ pub const PLUGIN_ABI_VERSION: u32 = 2;
 
 /// The function-pointer table that plugins hand back to `papermc-loader` at init time.
 ///
-/// papermc-loader.s stable JNI symbols forward to these function pointers for all per-call work.
+/// papermc-loader's stable JNI symbols forward to these function pointers for all per-call work.
 #[repr(C)]
 pub struct FnTable {
     pub abi_version: u32,

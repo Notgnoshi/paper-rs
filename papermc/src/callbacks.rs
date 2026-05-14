@@ -15,7 +15,7 @@ pub(crate) type BiConsumerFn =
 
 /// Trampoline target for the `RustDialogActionCallback.bridgeDispatch` native method.
 ///
-/// papermc-loader.s stable JNI symbol forwards here via the `FnTable::dispatch_bi_consumer`
+/// papermc-loader's stable JNI symbol forwards here via the `FnTable::dispatch_bi_consumer`
 /// function pointer.
 pub(crate) unsafe extern "C" fn dispatch_bi_consumer(
     env_raw: *mut JNIEnv,

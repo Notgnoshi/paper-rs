@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
@@ -7,8 +8,15 @@ use jni::objects::{JClass, JObject};
 use jni::refs::Global;
 use jni::strings::JNIStr;
 
+use crate::api::Api;
 use crate::callbacks::BiConsumerFn;
 use crate::dispatch::{CommandHandler, EventHandler};
+
+/// Type-erased on_disable Fn; downcasts the boxed plugin to its concrete `P` and calls
+/// `P::on_disable`. Captured at `init::<P>` time so `plugin_shutdown` can invoke it without knowing
+/// `P`.
+pub(crate) type OnDisableFn =
+    Box<dyn for<'a, 'local> Fn(&mut dyn Any, &mut Api<'a, 'local>) -> eyre::Result<()> + Send>;
 
 /// Reload-scoped state for a Paper plugin.
 ///
@@ -20,10 +28,10 @@ use crate::dispatch::{CommandHandler, EventHandler};
 ///
 /// User plugin code does not see `Ctx` directly; access is through `crate::Api` helpers.
 pub(crate) struct Ctx {
-    /// JNI global reference to the Java plugin object. Used wherever a registration sites needs
+    /// JNI global reference to the Java plugin object. Used wherever a registration site needs
     /// to pass the plugin into a Bukkit call (event subscription, command registration, listener
     /// unregistration).
-    pub(crate) plugin: Global<JObject<'static>>,
+    pub(crate) java_plugin: Global<JObject<'static>>,
     /// Bukkit `Command` instances we've registered with the CommandMap. Drained at shutdown so
     /// the CommandMap doesn't retain stale handlers across `/reload`.
     pub(crate) registered_commands: Vec<Global<JObject<'static>>>,
@@ -37,20 +45,26 @@ pub(crate) struct Ctx {
     /// that drove the lookup. Populated lazily on first miss in `cached_class`. Cleared along
     /// with the rest of `Ctx` on shutdown, releasing each `DeleteGlobalRef`.
     jni_cache: HashMap<&'static str, Global<JClass<'static>>>,
+    /// User plugin instance returned by `Plugin::on_enable`. Held as `Box<dyn Any + Send>` so
+    /// papermc doesn't need a generic parameter for the plugin type
+    pub(crate) rust_plugin: Option<Box<dyn Any + Send>>,
+    pub(crate) on_disable_fn: Option<OnDisableFn>,
     next_handler_id: i64,
     next_callback_id: i64,
 }
 
 impl Ctx {
-    pub(crate) fn new(plugin: Global<JObject<'static>>) -> Self {
+    pub(crate) fn new(java_plugin: Global<JObject<'static>>) -> Self {
         Self {
-            plugin,
+            java_plugin,
             registered_commands: Vec::new(),
             event_handlers: HashMap::new(),
             command_handlers: HashMap::new(),
             callbacks: HashMap::new(),
             mini_message: None,
             jni_cache: HashMap::new(),
+            rust_plugin: None,
+            on_disable_fn: None,
             next_handler_id: 1,
             next_callback_id: 1,
         }

@@ -4,7 +4,10 @@ use jni::Env;
 use jni::objects::JObject;
 use tracing::warn;
 
+use crate::api::Api;
 use crate::builder::PluginBuilder;
+use crate::plugin::Plugin;
+use crate::setup_api::SetupApi;
 use crate::{FnTable, PLUGIN_ABI_VERSION, callbacks, ctx, dispatch, ffi, registration};
 
 /// The static `FnTable` returned by every `papermc_plugin_init` call.
@@ -21,6 +24,21 @@ static FN_TABLE: FnTable = FnTable {
 
 unsafe extern "C" fn plugin_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
     let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        // Invoke the user's `Plugin::on_disable` (if a typed plugin was installed via `init::<P>`)
+        // before tearing down anything else, so the user code still sees a live Ctx and JNI env.
+        let plugin_and_fn = ctx::with_ctx(|c| {
+            let plugin = c.rust_plugin.take();
+            let on_disable = c.on_disable_fn.take();
+            plugin.zip(on_disable)
+        })
+        .flatten();
+        if let Some((mut plugin_box, on_disable)) = plugin_and_fn {
+            let mut api = Api::new(env);
+            if let Err(e) = on_disable(plugin_box.as_mut(), &mut api) {
+                warn!("Plugin::on_disable failed: {e}");
+            }
+            drop(plugin_box);
+        }
         if let Err(e) = registration::unregister_commands(env) {
             warn!("unregister_commands failed: {e}");
             env.exception_clear();
@@ -70,6 +88,48 @@ where
         }
         let mut builder = PluginBuilder::new(env);
         build(&mut builder)?;
+        Ok(())
+    });
+    match result {
+        Ok(()) => &FN_TABLE,
+        Err(_) => std::ptr::null(),
+    }
+}
+
+/// Plugin init driver
+///
+/// Plugin authors write a struct that implements [`Plugin`], then call this from their C-ABI
+/// `papermc_plugin_init` export:
+///
+/// ```ignore
+/// #[unsafe(no_mangle)]
+/// pub extern "C" fn papermc_plugin_init(
+///     env: *mut jni::sys::JNIEnv,
+///     plugin: jni::sys::jobject,
+/// ) -> *const papermc::FnTable {
+///     papermc::init::<MyPlugin>(env, plugin)
+/// }
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn init<P: Plugin>(env: *mut jni::sys::JNIEnv, plugin: jni::sys::jobject) -> *const FnTable {
+    let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
+        let plugin_obj = unsafe { JObject::from_raw(env, plugin) };
+        let plugin_global = env.new_global_ref(&plugin_obj)?;
+        if ctx::install(ctx::Ctx::new(plugin_global)).is_err() {
+            eyre::bail!("papermc::init: Ctx already initialized (prior shutdown missing)");
+        }
+        let api = Api::new(env);
+        let mut setup = SetupApi::<P>::new(api);
+        let plugin_state = P::on_enable(&mut setup)?;
+        ctx::with_ctx(|c| {
+            c.rust_plugin = Some(Box::new(plugin_state));
+            c.on_disable_fn = Some(Box::new(|any, api| {
+                let p = any
+                    .downcast_mut::<P>()
+                    .expect("plugin type mismatch in on_disable trampoline");
+                P::on_disable(p, api)
+            }));
+        });
         Ok(())
     });
     match result {

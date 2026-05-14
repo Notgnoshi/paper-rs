@@ -1,6 +1,6 @@
 //! Bridges Rust `tracing` events into the JVM's Java logger via a static dispatcher class.
 //!
-//! The subscriber lives here in papermc-loader rather than in a core plugin because papermc-loader.s
+//! The subscriber lives here in papermc-loader rather than in a core plugin because papermc-loader's
 //! .so is never unloaded; a subscriber whose `JniLayer` code lives in a `dlclose`-able .so would
 //! become unmapped on `/reload` and crash on the next tracing event. Keeping it here makes the
 //! subscriber a one-time, process-lifetime install.

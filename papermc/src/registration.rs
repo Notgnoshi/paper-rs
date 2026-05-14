@@ -26,7 +26,7 @@ pub(crate) fn subscribe_event<'local>(
     ctx::with_ctx(|c| -> jni::errors::Result<()> {
         let server = env
             .call_method(
-                &c.plugin,
+                &c.java_plugin,
                 jni_str!("getServer"),
                 jni_sig!("()Lorg/bukkit/Server;"),
                 &[],
@@ -52,7 +52,7 @@ pub(crate) fn subscribe_event<'local>(
                 JValue::Object(&executor),
                 JValue::Object(&priority),
                 JValue::Object(&executor),
-                JValue::Object(&c.plugin),
+                JValue::Object(&c.java_plugin),
             ],
         )?;
         Ok(())
@@ -77,7 +77,7 @@ pub(crate) fn register_command<'local>(
     ctx::with_ctx(|c| -> jni::errors::Result<()> {
         let server = env
             .call_method(
-                &c.plugin,
+                &c.java_plugin,
                 jni_str!("getServer"),
                 jni_sig!("()Lorg/bukkit/Server;"),
                 &[],
@@ -154,7 +154,7 @@ pub(crate) fn unregister_all_listeners(env: &mut Env<'_>) -> jni::errors::Result
             jni_str!("org/bukkit/event/HandlerList"),
             jni_str!("unregisterAll"),
             jni_sig!("(Lorg/bukkit/plugin/Plugin;)V"),
-            &[JValue::Object(&c.plugin)],
+            &[JValue::Object(&c.java_plugin)],
         )?;
         Ok(())
     })
