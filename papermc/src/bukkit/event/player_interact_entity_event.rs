@@ -6,7 +6,7 @@ use crate::api::Api;
 use crate::bukkit::EntityInst;
 use crate::jobject_repr::JObjectRepr;
 
-/// Marker type. Used in `PluginBuilder::on::<PlayerInteractEntityEvent>`.
+/// Marker type. Used in `SetupApi::register_event`.
 pub struct PlayerInteractEntityEvent;
 
 /// Wrapper for an `org.bukkit.event.player.PlayerInteractEntityEvent` JNI reference.

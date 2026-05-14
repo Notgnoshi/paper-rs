@@ -2,7 +2,6 @@
 use jni_sys::{JNIEnv, jboolean, jlong, jobject, jobjectArray};
 
 mod api;
-mod builder;
 pub mod bukkit;
 pub(crate) mod callbacks;
 pub(crate) mod ctx;
@@ -15,9 +14,8 @@ mod registration;
 mod setup_api;
 
 pub use api::Api;
-pub use builder::PluginBuilder;
 pub use plugin::Plugin;
-pub use plugin_init::{init, plugin_init};
+pub use plugin_init::init;
 pub use setup_api::SetupApi;
 
 /// ABI version of the `FnTable` struct.

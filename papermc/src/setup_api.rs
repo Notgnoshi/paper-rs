@@ -2,11 +2,32 @@ use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use jni::Env;
+use jni::objects::JObject;
+
 use crate::api::Api;
 use crate::bukkit::CommandSenderInst;
 use crate::bukkit::event::Event;
 use crate::plugin::Plugin;
 use crate::{ctx, registration};
+
+/// Best-effort lookup of `obj.getClass().getName()` for diagnostic logging.
+///
+/// Returns `<unknown>` on any JNI failure and clears the resulting exception so the caller's
+/// subsequent JNI calls aren't poisoned.
+fn actual_class_name(env: &mut Env<'_>, obj: &JObject<'_>) -> String {
+    match (|| -> jni::errors::Result<String> {
+        let class = env.get_object_class(obj)?;
+        let name_jstr = class.get_name(env)?;
+        name_jstr.try_to_string(env)
+    })() {
+        Ok(s) => s,
+        Err(_) => {
+            env.exception_clear();
+            "<unknown>".to_string()
+        }
+    }
+}
 
 /// Plugin setup wrapper around [Api].
 ///
@@ -56,8 +77,9 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
                     }
                     Err(jni::errors::Error::WrongObjectType) => {
                         tracing::debug!(
-                            "event skipped: expected {} (no concrete-type log without builder context)",
+                            "event skipped: expected {}, actual {}",
                             E::CLASS_NAME,
+                            actual_class_name(env, obj),
                         );
                     }
                     Err(e) => {

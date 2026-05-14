@@ -6,7 +6,7 @@ use crate::api::Api;
 use crate::bukkit::{Entity, EntityInst, Player};
 use crate::jobject_repr::JObjectRepr;
 
-/// Marker type. Used in `PluginBuilder::on::<EntityDamageByEntityEvent>`.
+/// Marker type. Used in `SetupApi::register_event`
 pub struct EntityDamageByEntityEvent;
 
 /// Wrapper for an `org.bukkit.event.entity.EntityDamageByEntityEvent` JNI reference.

@@ -15,8 +15,8 @@ pub use player_interact_entity_event::{PlayerInteractEntityEvent, PlayerInteract
 /// The marker (e.g. `PlayerInteractEntityEvent`) is a ZST without a lifetime; the associated
 /// `Wrapper<'local>` is the lifetime'd typed reference plugin authors receive in handler bodies.
 ///
-/// This indirection sidesteps Rust's lack of HKT: we want `PluginBuilder::on` to accept any event
-/// marker and dispatch to a handler whose argument is the corresponding wrapper at the
+/// This indirection sidesteps Rust's lack of HKT: we want `SetupApi::register_event` to accept any
+/// event marker and dispatch to a handler whose argument is the corresponding wrapper at the
 /// dispatch-time JNI lifetime.
 pub trait Event: 'static {
     type Wrapper<'local>: JObjectRepr<'local>;
