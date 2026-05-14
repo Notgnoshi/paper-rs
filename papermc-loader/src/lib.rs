@@ -121,7 +121,7 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1enable<'local>(
                 tracing::warn!(
                     "papermc-loader: stale plugin present; running shutdown before re-load"
                 );
-                let _ = unsafe { ((*loaded.api).shutdown)(env.get_raw()) };
+                let _ = unsafe { ((*loaded.api).on_disable)(env.get_raw()) };
                 drop(stale);
             }
             tracing::debug!("papermc-loader: dlopen({path})");
@@ -147,7 +147,7 @@ pub extern "system" fn Java_io_papermc_RustPlugin_on_1disable<'local>(
             let guard = LOADED_PLUGIN.load();
             if let Some(loaded) = guard.as_ref() {
                 tracing::info!("papermc-loader: calling plugin shutdown");
-                let _ = unsafe { ((*loaded.api).shutdown)(env.get_raw()) };
+                let _ = unsafe { ((*loaded.api).on_disable)(env.get_raw()) };
                 drop(guard);
                 tracing::debug!(
                     "papermc-loader: dropping plugin library (dlclose may be deferred)"

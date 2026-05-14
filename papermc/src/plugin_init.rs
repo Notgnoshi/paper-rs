@@ -13,7 +13,7 @@ use crate::{FnTable, PLUGIN_ABI_VERSION, callbacks, ctx, dispatch, ffi, logger, 
 static FN_TABLE: FnTable = FnTable {
     abi_version: PLUGIN_ABI_VERSION,
     size: size_of::<FnTable>() as u32,
-    shutdown: plugin_shutdown,
+    on_disable: plugin_on_disable,
     dispatch_event: dispatch::dispatch_event,
     dispatch_command: dispatch::dispatch_command,
     dispatch_tab_complete: dispatch::dispatch_tab_complete,
@@ -21,7 +21,7 @@ static FN_TABLE: FnTable = FnTable {
     drop_callback: callbacks::drop_callback,
 };
 
-unsafe extern "C" fn plugin_shutdown(env: *mut jni::sys::JNIEnv) -> i32 {
+unsafe extern "C" fn plugin_on_disable(env: *mut jni::sys::JNIEnv) -> i32 {
     let result = ffi::bridge(env, |env: &mut Env<'_>| -> eyre::Result<()> {
         // Invoke the user's `Plugin::on_disable` (if a typed plugin was installed via `init::<P>`)
         // before tearing down anything else, so the user code still sees a live Ctx and JNI env.

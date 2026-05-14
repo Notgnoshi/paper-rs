@@ -35,8 +35,9 @@ pub struct FnTable {
     /// Used to detect ABI mismatches when loading plugins compiled against different versions of
     /// this library.
     pub size: u32,
-    /// Per-plugin teardown. Returns 0 on success.
-    pub shutdown: unsafe extern "C" fn(*mut JNIEnv) -> i32,
+    /// Per-plugin teardown; invoked by papermc-loader at `Java_..._on_disable` time. Returns 0
+    /// on success.
+    pub on_disable: unsafe extern "C" fn(*mut JNIEnv) -> i32,
     /// Bukkit fired an event registered through this core; look up handler by id and invoke it.
     pub dispatch_event: unsafe extern "C" fn(*mut JNIEnv, jlong, jobject),
     /// Bukkit dispatched a command registered through this core.

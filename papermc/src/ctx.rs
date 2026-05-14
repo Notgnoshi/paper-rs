@@ -13,7 +13,7 @@ use crate::callbacks::BiConsumerFn;
 use crate::dispatch::{CommandHandler, EventHandler};
 
 /// Type-erased on_disable Fn; downcasts the boxed plugin to its concrete `P` and calls
-/// `P::on_disable`. Captured at `init::<P>` time so `plugin_shutdown` can invoke it without knowing
+/// `P::on_disable`. Captured at `init::<P>` time so `plugin_on_disable` can invoke it without knowing
 /// `P`.
 pub(crate) type OnDisableFn =
     Box<dyn for<'a, 'local> Fn(&mut dyn Any, &mut Api<'a, 'local>) -> eyre::Result<()> + Send>;
@@ -21,7 +21,7 @@ pub(crate) type OnDisableFn =
 /// Reload-scoped state for a Paper plugin.
 ///
 /// [`Ctx`] is the single consolidated home for state that needs to outlive an individual JNI
-/// dispatch call but not survive a `/reload`. Born in `plugin_init`, dropped in `plugin_shutdown`.
+/// dispatch call but not survive a `/reload`. Born in `plugin_init`, dropped in `plugin_on_disable`.
 ///
 /// The Ctx is stored in a global static, but its lifetime is scoped by the plugin initialization
 /// and shutdown.
@@ -91,7 +91,7 @@ impl Ctx {
 
 /// Singleton Ctx storage.
 ///
-/// `None` between `plugin_shutdown` and the next `plugin_init`. `install` refuses to overwrite an
+/// `None` between `plugin_on_disable` and the next `plugin_init`. `install` refuses to overwrite an
 /// existing `Some` so that reload-shutdown-then-init is the only legal init path.
 static CTX: Mutex<Option<Ctx>> = Mutex::new(None);
 

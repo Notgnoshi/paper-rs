@@ -106,7 +106,7 @@ pub(crate) fn register_command<'local>(
 
 /// Walk the tracked `RustCommand` instances and call `Command.unregister(commandMap)` on each.
 ///
-/// Called from `plugin_shutdown`.
+/// Called from `plugin_on_disable`.
 pub(crate) fn unregister_commands(env: &mut Env<'_>) -> jni::errors::Result<()> {
     let commands =
         ctx::with_ctx(|c| std::mem::take(&mut c.registered_commands)).unwrap_or_default();
@@ -143,7 +143,7 @@ pub(crate) fn unregister_commands(env: &mut Env<'_>) -> jni::errors::Result<()> 
 
 /// Unregister every Bukkit listener attached to this plugin.
 ///
-/// Wraps Bukkit's `HandlerList.unregisterAll(Plugin)`. Called from `plugin_shutdown` so the
+/// Wraps Bukkit's `HandlerList.unregisterAll(Plugin)`. Called from `plugin_on_disable` so the
 /// PluginManager stops delivering events to our `RustEventExecutor` instances before we drop the
 /// Rust-side handler maps; otherwise an event firing between handler-map teardown and Bukkit's
 /// own listener cleanup would log a spurious "no handler registered" warning (and, in the
