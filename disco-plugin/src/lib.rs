@@ -13,8 +13,8 @@ pub struct DiscoPlugin;
 
 impl Plugin for DiscoPlugin {
     fn on_enable(api: &mut SetupApi<'_, '_, Self>) -> eyre::Result<Self> {
-        api.register_event::<PlayerInteractEntityEvent>(Self::handle_interact)?;
-        api.register_event::<EntityDamageByEntityEvent>(Self::handle_sheep_damaged)?;
+        api.register_event::<PlayerInteractEntityEvent, _>(Self::handle_interact)?;
+        api.register_event::<EntityDamageByEntityEvent, _>(Self::handle_sheep_damaged)?;
         api.register_command("hello", Self::handle_hello)?;
         Ok(DiscoPlugin)
     }
@@ -25,55 +25,30 @@ impl DiscoPlugin {
         &mut self,
         api: &mut Api<'_, 'l>,
         event: &PlayerInteractEntityEventRef<'l>,
-    ) {
-        let entity = match event.right_clicked(api) {
-            Ok(e) => e,
-            Err(e) => {
-                tracing::warn!("right_clicked failed: {e}");
-                return;
-            }
-        };
+    ) -> eyre::Result<()> {
+        let entity = event.right_clicked(api)?;
         if let Some(mut sheep) = entity.cast::<Sheep>(api) {
             tracing::debug!("Recoloring a sheep to pink");
-            if let Err(e) = sheep.set_color(api, DyeColor::Pink) {
-                tracing::warn!("set_color failed: {e}");
-            }
+            sheep.set_color(api, DyeColor::Pink)?;
         }
+        Ok(())
     }
 
     fn handle_sheep_damaged<'l>(
         &mut self,
         api: &mut Api<'_, 'l>,
         event: &EntityDamageByEntityEventRef<'l>,
-    ) {
-        let entity = match event.entity(api) {
-            Ok(e) => e,
-            Err(e) => {
-                tracing::warn!("getEntity failed: {e}");
-                return;
-            }
-        };
+    ) -> eyre::Result<()> {
+        let entity = event.entity(api)?;
         if entity.cast::<Sheep>(api).is_none() {
-            return;
+            return Ok(());
         }
-        let player = match event.player_attacker(api) {
-            Ok(Some(p)) => p,
-            Ok(None) => return,
-            Err(e) => {
-                tracing::warn!("player_attacker failed: {e}");
-                return;
-            }
+        let Some(player) = event.player_attacker(api)? else {
+            return Ok(());
         };
-        let dialog = match build_baaa_dialog(api) {
-            Ok(d) => d,
-            Err(e) => {
-                tracing::warn!("build_baaa_dialog failed: {e}");
-                return;
-            }
-        };
-        if let Err(e) = player.show_dialog(api, &dialog) {
-            tracing::warn!("show_dialog failed: {e}");
-        }
+        let dialog = build_baaa_dialog(api)?;
+        player.show_dialog(api, &dialog)?;
+        Ok(())
     }
 
     fn handle_hello(
@@ -81,24 +56,14 @@ impl DiscoPlugin {
         api: &mut Api<'_, '_>,
         sender: &CommandSenderInst<'_>,
         args: &[String],
-    ) -> bool {
+    ) -> eyre::Result<bool> {
         let name = match args.first() {
             Some(arg) => arg.clone(),
-            None => match sender.name(api) {
-                Ok(n) => n,
-                Err(e) => {
-                    tracing::warn!("getName failed: {e}");
-                    return false;
-                }
-            },
+            None => sender.name(api)?,
         };
         tracing::debug!("Greeting {name}");
-        let reply = format!("<green>Hello, <yellow>{name}</yellow>!");
-        if let Err(e) = sender.send_message(api, reply) {
-            tracing::warn!("sendMessage failed: {e}");
-            return false;
-        }
-        true
+        sender.send_message(api, format!("<green>Hello, <yellow>{name}</yellow>!"))?;
+        Ok(true)
     }
 }
 

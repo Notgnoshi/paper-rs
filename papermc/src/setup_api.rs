@@ -56,15 +56,15 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
         &mut self.api
     }
 
-    /// Register a Bukkit event handler as a method on the plugin struct.
-    ///
-    /// The handler runs with `&mut Self` borrowed from the plugin instance papermc is holding for
-    /// this `/reload`s lifetime. Plugin state mutated through the handler persists for the rest of
-    /// the load (cleared on `/reload` along with the plugin instance).
-    pub fn register_event<E: Event>(
-        &mut self,
-        handler: for<'b, 'l> fn(&mut P, &mut Api<'b, 'l>, &E::Wrapper<'l>),
-    ) -> eyre::Result<()> {
+    /// Register a Bukkit event handler. Handler errors are logged and discarded.
+    pub fn register_event<E, F>(&mut self, handler: F) -> eyre::Result<()>
+    where
+        E: Event,
+        F: for<'b, 'l> Fn(&mut P, &mut Api<'b, 'l>, &E::Wrapper<'l>) -> eyre::Result<()>
+            + Send
+            + Sync
+            + 'static,
+    {
         let id = ctx::next_id();
         ctx::with_ctx(|c| {
             c.event_handlers.insert(
@@ -73,7 +73,12 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
                     Ok(wrapper) => {
                         with_plugin::<P, _>(env, |p, env| {
                             let mut api = Api::new(env);
-                            handler(p, &mut api, wrapper);
+                            if let Err(e) = handler(p, &mut api, wrapper) {
+                                tracing::warn!(
+                                    "event handler for {} returned error: {e:?}",
+                                    E::CLASS_NAME,
+                                );
+                            }
                         });
                     }
                     Err(jni::errors::Error::WrongObjectType) => {
@@ -97,18 +102,22 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
         Ok(())
     }
 
-    /// Register a Bukkit command handler as a method on the plugin struct.
-    pub fn register_command(
-        &mut self,
-        name: &str,
-        handler: for<'b, 'l> fn(
-            &mut P,
-            &mut Api<'b, 'l>,
-            &CommandSenderInst<'l>,
-            &[String],
-        ) -> bool,
-    ) -> eyre::Result<()> {
+    /// Register a Bukkit command handler. Handler errors are logged and treated as `false`
+    /// (Bukkit will print usage).
+    pub fn register_command<F>(&mut self, name: &str, handler: F) -> eyre::Result<()>
+    where
+        F: for<'b, 'l> Fn(
+                &mut P,
+                &mut Api<'b, 'l>,
+                &CommandSenderInst<'l>,
+                &[String],
+            ) -> eyre::Result<bool>
+            + Send
+            + Sync
+            + 'static,
+    {
         let id = ctx::next_id();
+        let command_name = name.to_string();
         ctx::with_ctx(|c| {
             c.command_handlers.insert(
                 id,
@@ -116,7 +125,15 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
                     match CommandSenderInst::wrap_ref(env, sender_obj) {
                         Ok(sender) => with_plugin::<P, _>(env, |p, env| {
                             let mut api = Api::new(env);
-                            handler(p, &mut api, sender, args)
+                            match handler(p, &mut api, sender, args) {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "command `{command_name}` handler returned error: {e:?}"
+                                    );
+                                    false
+                                }
+                            }
                         })
                         .unwrap_or(false),
                         Err(e) => {
