@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["disco-core", "paper", "paper-loader"]
+members = ["disco-plugin", "papermc", "papermc-loader"]
 
 [workspace.package]
 version = "0.0.1-rc0"
@@ -14,6 +14,6 @@ eyre = "0.6"
 jni = "0.22"
 jni-sys = "0.4"
 libloading = "0.9"
-paper = { path = "paper" }
+papermc = { path = "papermc" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

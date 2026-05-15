@@ -7,9 +7,9 @@ all: disco-plugin
 gradlew:
 	gradle wrapper --gradle-version $(GRADLE_VERSION)
 
-.PHONY: paper-shim
-paper-shim: gradlew cargo
-	./gradlew :paper-shim:build
+.PHONY: papermc
+papermc: gradlew cargo
+	./gradlew :papermc:build
 
 .PHONY: disco-plugin
 disco-plugin: gradlew cargo
@@ -21,7 +21,7 @@ cargo:
 
 .PHONY: run
 run: disco-plugin
-	RUST_LOG=$(RUST_LOG) ./gradlew :disco-plugin:runServer -Pnative-lib=$(abspath target/release/libdisco_ffi.so)
+	RUST_LOG=$(RUST_LOG) ./gradlew :disco-plugin:runServer
 
 .PHONY: clean clean-all
 clean:
