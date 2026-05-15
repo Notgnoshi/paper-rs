@@ -1,26 +1,12 @@
-use jni::objects::JObject;
 use jni::{jni_sig, jni_str};
 
-use super::Event;
 use crate::api::Api;
 use crate::bukkit::{EntityInst, Player};
-use crate::jobject_repr::JObjectRepr;
+use crate::papermc_event;
 
-/// Marker type. Used in `SetupApi::register_event`
-pub struct EntityDamageByEntityEvent;
-
-/// Wrapper for an `org.bukkit.event.entity.EntityDamageByEntityEvent` JNI reference.
-#[repr(transparent)]
-pub struct EntityDamageByEntityEventRef<'local> {
-    obj: JObject<'local>,
-}
-
-// SAFETY: `#[repr(transparent)]` over `JObject<'local>`
-unsafe impl<'local> JObjectRepr<'local> for EntityDamageByEntityEventRef<'local> {}
-
-impl Event for EntityDamageByEntityEvent {
-    type Wrapper<'local> = EntityDamageByEntityEventRef<'local>;
-    const CLASS_NAME: &'static str = "org/bukkit/event/entity/EntityDamageByEntityEvent";
+papermc_event! {
+    pub EntityDamageByEntityEvent => EntityDamageByEntityEventRef
+        = "org/bukkit/event/entity/EntityDamageByEntityEvent";
 }
 
 impl<'local> EntityDamageByEntityEventRef<'local> {
@@ -38,10 +24,8 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         Ok(EntityInst::new(entity))
     }
 
-    /// The entity that dealt the damage.
-    ///
-    /// For projectile damage this is the projectile itself (e.g., an arrow); to find the
-    /// player who ultimately caused the damage, use [`player_attacker`](Self::player_attacker).
+    /// The entity that dealt the damage. For projectile damage this is the projectile itself;
+    /// see [`player_attacker`](Self::player_attacker) for the shooter.
     pub fn damager(&self, api: &mut Api<'_, 'local>) -> eyre::Result<EntityInst<'local>> {
         let env = api.jni();
         let entity = env
@@ -55,12 +39,7 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         Ok(EntityInst::new(entity))
     }
 
-    /// If the damage was ultimately caused by a player (directly, or via a player-shot
-    /// projectile / thrown potion), returns that player. Otherwise `None`.
-    ///
-    /// `damager` itself returns the immediate damaging entity, which for projectiles is the
-    /// projectile, not the shooter. This helper walks one level of indirection through
-    /// `Projectile.getShooter()` so callers don't have to.
+    /// Walks one level of `Projectile.getShooter()` so projectile damage attributes to the player.
     pub fn player_attacker(
         &self,
         api: &mut Api<'_, 'local>,
@@ -69,13 +48,10 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
         let player_class = api.class("org/bukkit/entity/Player")?;
         let env = api.jni();
 
-        // Direct player damage: punch, sword, etc.
         if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &player_class)? {
-            // SAFETY: verified instanceof Player.
             return Ok(Some(unsafe { Player::from_jobject(damager.obj) }));
         }
 
-        // Projectile damage: arrow, thrown potion, trident, etc. Check the shooter.
         let projectile_class = api.class("org/bukkit/entity/Projectile")?;
         let env = api.jni();
         if !damager.obj.is_null() && env.is_instance_of(&damager.obj, &projectile_class)? {
@@ -87,9 +63,8 @@ impl<'local> EntityDamageByEntityEventRef<'local> {
                     &[],
                 )?
                 .l()?;
-            // JNI's IsInstanceOf returns TRUE for null, so null-check first.
+            // JNI's IsInstanceOf returns TRUE for null.
             if !shooter_obj.is_null() && env.is_instance_of(&shooter_obj, &player_class)? {
-                // SAFETY: verified non-null and instanceof Player.
                 return Ok(Some(unsafe { Player::from_jobject(shooter_obj) }));
             }
         }

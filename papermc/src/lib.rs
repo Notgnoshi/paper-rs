@@ -14,6 +14,7 @@ mod plugin;
 mod plugin_init;
 mod registration;
 mod setup_api;
+pub mod util;
 
 pub use api::Api;
 pub use plugin::Plugin;

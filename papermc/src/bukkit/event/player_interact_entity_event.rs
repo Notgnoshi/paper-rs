@@ -1,28 +1,12 @@
-use jni::objects::JObject;
 use jni::{jni_sig, jni_str};
 
-use super::Event;
 use crate::api::Api;
 use crate::bukkit::EntityInst;
-use crate::jobject_repr::JObjectRepr;
+use crate::papermc_event;
 
-/// Marker type. Used in `SetupApi::register_event`.
-pub struct PlayerInteractEntityEvent;
-
-/// Wrapper for an `org.bukkit.event.player.PlayerInteractEntityEvent` JNI reference.
-///
-/// Plugin handlers receive this by `&` in their handler bodies.
-#[repr(transparent)]
-pub struct PlayerInteractEntityEventRef<'local> {
-    obj: JObject<'local>,
-}
-
-// SAFETY: `#[repr(transparent)]` over `JObject<'local>`
-unsafe impl<'local> JObjectRepr<'local> for PlayerInteractEntityEventRef<'local> {}
-
-impl Event for PlayerInteractEntityEvent {
-    type Wrapper<'local> = PlayerInteractEntityEventRef<'local>;
-    const CLASS_NAME: &'static str = "org/bukkit/event/player/PlayerInteractEntityEvent";
+papermc_event! {
+    pub PlayerInteractEntityEvent => PlayerInteractEntityEventRef
+        = "org/bukkit/event/player/PlayerInteractEntityEvent";
 }
 
 impl<'local> PlayerInteractEntityEventRef<'local> {
