@@ -6,10 +6,7 @@ use crate::api::Api;
 
 /// Wrapper for an `io.papermc.paper.dialog.Dialog` JNI reference.
 ///
-/// Java's `Dialog.create` takes a `Consumer<RegistryBuilderFactory<...>>` lambda. Constructing
-/// that lambda from Rust requires the functional-interface-to-Rust-closure bridge (stage 4),
-/// so for now we route through a small papermc Java helper `io.papermc.Dialogs.create`
-/// that hides the lambda surface.
+/// Java's `Dialog.create` takes a `Consumer<RegistryBuilderFactory<...>>` lambda.
 #[repr(transparent)]
 pub struct Dialog<'local> {
     pub(crate) obj: JObject<'local>,

@@ -57,8 +57,15 @@ static CTX: Mutex<Option<Ctx>> = Mutex::new(None);
 
 pub(crate) struct AlreadyInitialized;
 
+/// Ignore poisoning: a panic mid-mutation leaves Ctx in an unusual but not catastrophic state
+/// (each field's operations are simple inserts/takes). Bailing out would brick the plugin until
+/// the server restarts.
+fn lock() -> std::sync::MutexGuard<'static, Option<Ctx>> {
+    CTX.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub(crate) fn install(ctx: Ctx) -> Result<(), AlreadyInitialized> {
-    let mut guard = CTX.lock().unwrap();
+    let mut guard = lock();
     if guard.is_some() {
         return Err(AlreadyInitialized);
     }
@@ -67,12 +74,12 @@ pub(crate) fn install(ctx: Ctx) -> Result<(), AlreadyInitialized> {
 }
 
 pub(crate) fn uninstall() {
-    *CTX.lock().unwrap() = None;
+    *lock() = None;
 }
 
 /// The lock is held for the duration of `body`; `body` must not do JNI or invoke user code.
 pub(crate) fn with_ctx<R>(body: impl FnOnce(&mut Ctx) -> R) -> Option<R> {
-    let mut guard = CTX.lock().unwrap();
+    let mut guard = lock();
     guard.as_mut().map(body)
 }
 
