@@ -4,6 +4,7 @@ use jni::{Env, jni_sig, jni_str};
 use super::{DialogAfterAction, DialogBody};
 use crate::api::Api;
 use crate::bukkit::Component;
+use crate::papermc_builder;
 
 /// Wrapper for an `io.papermc.paper.registry.data.dialog.DialogBase` JNI reference.
 #[repr(transparent)]
@@ -12,9 +13,7 @@ pub struct DialogBase<'local> {
 }
 
 impl<'local> DialogBase<'local> {
-    /// Start a builder for a DialogBase with the given title Component.
-    ///
-    /// Mirrors `DialogBase.builder(Component title)`.
+    /// Start a builder with the given title Component.
     pub fn builder(
         api: &mut Api<'_, 'local>,
         title: &Component<'local>,
@@ -34,17 +33,12 @@ impl<'local> DialogBase<'local> {
     }
 }
 
-/// Wrapper for `io.papermc.paper.registry.data.dialog.DialogBase.Builder`.
-///
-/// Each chainable setter makes one JNI call; the underlying Java builder returns `this` so we
-/// keep the same JObject reference.
-#[repr(transparent)]
-pub struct DialogBaseBuilder<'local> {
-    obj: JObject<'local>,
+papermc_builder! {
+    pub DialogBaseBuilder<'local> -> DialogBase<'local>
+        builds "()Lio/papermc/paper/registry/data/dialog/DialogBase;";
 }
 
 impl<'local> DialogBaseBuilder<'local> {
-    /// `Builder.externalTitle(@Nullable Component)`.
     pub fn external_title(
         self,
         api: &mut Api<'_, 'local>,
@@ -64,7 +58,6 @@ impl<'local> DialogBaseBuilder<'local> {
         Ok(self)
     }
 
-    /// `Builder.canCloseWithEscape(boolean)`.
     pub fn can_close_with_escape(
         self,
         api: &mut Api<'_, 'local>,
@@ -80,7 +73,6 @@ impl<'local> DialogBaseBuilder<'local> {
         Ok(self)
     }
 
-    /// `Builder.pause(boolean)`.
     pub fn pause(self, api: &mut Api<'_, 'local>, value: bool) -> eyre::Result<Self> {
         let env = api.jni();
         env.call_method(
@@ -92,7 +84,6 @@ impl<'local> DialogBaseBuilder<'local> {
         Ok(self)
     }
 
-    /// `Builder.afterAction(DialogAfterAction)`.
     pub fn after_action(
         self,
         api: &mut Api<'_, 'local>,
@@ -111,7 +102,6 @@ impl<'local> DialogBaseBuilder<'local> {
         Ok(self)
     }
 
-    /// `Builder.body(List<? extends DialogBody>)`.
     pub fn body(
         self,
         api: &mut Api<'_, 'local>,
@@ -128,20 +118,6 @@ impl<'local> DialogBaseBuilder<'local> {
             &[JValue::Object(&list)],
         )?;
         Ok(self)
-    }
-
-    /// `Builder.build()` -- finalize and return the DialogBase.
-    pub fn build(self, api: &mut Api<'_, 'local>) -> eyre::Result<DialogBase<'local>> {
-        let env = api.jni();
-        let obj = env
-            .call_method(
-                &self.obj,
-                jni_str!("build"),
-                jni_sig!("()Lio/papermc/paper/registry/data/dialog/DialogBase;"),
-                &[],
-            )?
-            .l()?;
-        Ok(DialogBase { obj })
     }
 }
 

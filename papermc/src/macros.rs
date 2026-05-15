@@ -150,6 +150,61 @@ macro_rules! papermc_event {
     };
 }
 
+/// Define a fluent builder wrapper plus its `build()` method. Setters are not templated; write
+/// them in a separate `impl` block.
+///
+/// ```ignore
+/// papermc_builder! {
+///     pub DialogBaseBuilder<'local> -> DialogBase<'local>
+///         builds "()Lio/papermc/paper/registry/data/dialog/DialogBase;";
+/// }
+///
+/// impl<'local> DialogBaseBuilder<'local> {
+///     pub fn pause(self, api: &mut Api<'_, 'local>, value: bool) -> eyre::Result<Self> { ... }
+///     // ...
+/// }
+/// ```
+///
+/// The target type `$out` is constructed via struct literal (`$out { obj }`), so it must have a
+/// field named `obj` accessible from the macro call site.
+#[macro_export]
+macro_rules! papermc_builder {
+    (
+        $(#[$attr:meta])*
+        $vis:vis $name:ident <'local> -> $out:ident <'local>
+            builds $build_sig:literal ;
+    ) => {
+        $(#[$attr])*
+        #[doc = ""]
+        #[doc = concat!("Builder for [`", stringify!($out), "`].")]
+        #[repr(transparent)]
+        $vis struct $name<'local> {
+            pub(crate) obj: ::jni::objects::JObject<'local>,
+        }
+
+        unsafe impl<'local> $crate::jobject_repr::JObjectRepr<'local> for $name<'local> {}
+
+        impl<'local> $name<'local> {
+            #[doc = concat!("Finalize and return a [`", stringify!($out), "`].")]
+            pub fn build(
+                self,
+                api: &mut $crate::Api<'_, 'local>,
+            ) -> ::eyre::Result<$out<'local>> {
+                let env = api.jni();
+                let obj = env
+                    .call_method(
+                        &self.obj,
+                        ::jni::jni_str!("build"),
+                        ::jni::jni_sig!($build_sig),
+                        &[],
+                    )?
+                    .l()?;
+                Ok($out { obj })
+            }
+        }
+    };
+}
+
 /// Define a Rust enum mirror of a Java enum, plus an `as_java` method that resolves to the
 /// corresponding static field on the JVM class.
 ///
