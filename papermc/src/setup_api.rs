@@ -153,9 +153,9 @@ impl<'a, 'local, P: Plugin> SetupApi<'a, 'local, P> {
 /// Take the plugin out of `Ctx`, downcast to `P`, run `body(&mut p, env)`, then put the plugin
 /// back. Returns `None` if no plugin is currently present.
 ///
-/// Note on reentrancy: the plugin is out of `Ctx` for the duration of `body`. A nested dispatch
-/// that re-enters this function would see `None` and silently skip. Bukkit dispatches events on the
-/// main server thread, so the more realistic risk is a handler firing another event synchronously
+/// A panic in `body` is caught so the plugin Box is returned to `Ctx` before propagating up to
+/// `ffi::bridge`. The plugin's post-panic state may be partially-mutated (which is why we wrap in
+/// `AssertUnwindSafe`); preserving it is preferable to silently disabling the plugin until reload.
 fn with_plugin<'local, P, R>(
     env: &mut jni::Env<'local>,
     body: impl FnOnce(&mut P, &mut jni::Env<'local>) -> R,
@@ -164,14 +164,17 @@ where
     P: Plugin,
 {
     let mut plugin_box: Box<dyn Any + Send> = ctx::with_ctx(|c| c.rust_plugin.take()).flatten()?;
-    let result = {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let p = plugin_box
             .downcast_mut::<P>()
             .expect("plugin type mismatch in dispatch");
         body(p, env)
-    };
+    }));
     ctx::with_ctx(|c| {
         c.rust_plugin = Some(plugin_box);
     });
-    Some(result)
+    match outcome {
+        Ok(r) => Some(r),
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
