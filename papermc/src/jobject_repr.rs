@@ -1,3 +1,4 @@
+use jni::Env;
 use jni::objects::JObject;
 
 /// # Safety
@@ -42,4 +43,12 @@ pub unsafe trait JObjectRepr<'local>: Sized {
 /// `"org/bukkit/entity/Player"`).
 pub unsafe trait JClassCast<'local>: JObjectRepr<'local> {
     const CLASS_NAME: &'static str;
+
+    fn wrap_ref<'a>(env: &mut Env<'_>, obj: &'a JObject<'local>) -> jni::errors::Result<&'a Self> {
+        let class = crate::ctx::cached_class(env, Self::CLASS_NAME)?;
+        if !env.is_instance_of(obj, &class)? {
+            return Err(jni::errors::Error::WrongObjectType);
+        }
+        Ok(Self::from_jobject_ref(obj))
+    }
 }

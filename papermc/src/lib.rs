@@ -9,6 +9,7 @@ mod dispatch;
 pub(crate) mod ffi;
 pub mod jobject_repr;
 pub mod logger;
+mod macros;
 mod plugin;
 mod plugin_init;
 mod registration;

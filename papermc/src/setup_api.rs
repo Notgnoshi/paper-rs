@@ -8,6 +8,7 @@ use jni::objects::JObject;
 use crate::api::Api;
 use crate::bukkit::CommandSenderInst;
 use crate::bukkit::event::Event;
+use crate::jobject_repr::JClassCast;
 use crate::plugin::Plugin;
 use crate::{ctx, registration};
 

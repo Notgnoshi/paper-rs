@@ -1,46 +1,12 @@
-use jni::objects::{JObject, JString, JValue};
-use jni::{Env, jni_sig, jni_str};
+use jni::objects::{JString, JValue};
+use jni::{jni_sig, jni_str};
 
 use crate::api::Api;
-use crate::ctx;
-use crate::jobject_repr::{JClassCast, JObjectRepr};
+use crate::jobject_repr::JObjectRepr;
+use crate::papermc_jobject_inst;
 
-/// Type-erased wrapper for an `org.bukkit.command.CommandSender` JNI reference.
-#[repr(transparent)]
-pub struct CommandSenderInst<'local> {
-    pub(crate) obj: JObject<'local>,
-}
-
-unsafe impl<'local> JObjectRepr<'local> for CommandSenderInst<'local> {}
-unsafe impl<'local> JClassCast<'local> for CommandSenderInst<'local> {
-    const CLASS_NAME: &'static str = "org/bukkit/command/CommandSender";
-}
-impl<'local> CommandSender<'local> for CommandSenderInst<'local> {}
-
-impl<'local> CommandSenderInst<'local> {
-    pub(crate) fn wrap_ref<'a>(
-        env: &mut Env<'_>,
-        obj: &'a JObject<'local>,
-    ) -> jni::errors::Result<&'a Self> {
-        let class = ctx::cached_class(env, <Self as JClassCast>::CLASS_NAME)?;
-        if !env.is_instance_of(obj, &class)? {
-            return Err(jni::errors::Error::WrongObjectType);
-        }
-        Ok(Self::from_jobject_ref(obj))
-    }
-
-    pub fn cast<T>(self, api: &mut Api<'_, 'local>) -> Option<T>
-    where
-        T: JClassCast<'local> + CommandSender<'local>,
-    {
-        let class = api.class(T::CLASS_NAME).ok()?;
-        let env = api.jni();
-        if env.is_instance_of(&self.obj, &class).ok()? {
-            Some(unsafe { T::from_jobject(self.obj) })
-        } else {
-            None
-        }
-    }
+papermc_jobject_inst! {
+    pub CommandSenderInst<'local> = "org/bukkit/command/CommandSender": CommandSender;
 }
 
 /// Rust trait mirror of Bukkit's `org.bukkit.command.CommandSender` interface.

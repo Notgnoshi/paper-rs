@@ -1,22 +1,14 @@
-use jni::objects::{JObject, JValue};
+use jni::objects::JValue;
 use jni::{jni_sig, jni_str};
 
 use super::Entity;
 use crate::api::Api;
 use crate::bukkit::DyeColor;
-use crate::jobject_repr::{JClassCast, JObjectRepr};
+use crate::papermc_jobject;
 
-/// Wrapper for an `org.bukkit.entity.Sheep` JNI reference.
-#[repr(transparent)]
-pub struct Sheep<'local> {
-    obj: JObject<'local>,
+papermc_jobject! {
+    pub Sheep<'local> = "org/bukkit/entity/Sheep": Entity;
 }
-
-unsafe impl<'local> JObjectRepr<'local> for Sheep<'local> {}
-unsafe impl<'local> JClassCast<'local> for Sheep<'local> {
-    const CLASS_NAME: &'static str = "org/bukkit/entity/Sheep";
-}
-impl<'local> Entity<'local> for Sheep<'local> {}
 
 impl<'local> Sheep<'local> {
     pub fn set_color(&mut self, api: &mut Api, color: DyeColor) -> eyre::Result<()> {
